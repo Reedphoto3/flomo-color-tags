@@ -1,0 +1,17 @@
+# macOS Finder metadata
+.DS_Store
+
+# Local release bundles; publish these as reviewed release assets instead of source files.
+*.zip
+*.crx
+
+# Personal flomo color rules; keep backups outside the public repository.
+flomo-color-tags-settings*.json
+
+# Local source screenshots may contain real tags or note content.
+flomotag.jpg
+
+# Internal development notes; keep them locally but do not publish them.
+VALIDATION.md
+IMPLEMENTATION_PLAN.md
+PRIVACY_AUDIT.md

@@ -1,0 +1,44 @@
+[data-flomo-color-tag="true"]:not([data-flomo-color-tag-scope="sidebar"]) {
+  background-color: var(--flomo-color-tag-background) !important;
+  border: 1px solid var(--flomo-color-tag-border) !important;
+  border-radius: 0.38em !important;
+  color: var(--flomo-color-tag-text) !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.05em 0.28em;
+  text-decoration-color: currentColor !important;
+}
+
+/* 侧边栏普通标签也采用正文同款的浅色背景、边框和圆角，方便快速区分。 */
+[data-flomo-color-tag="true"][data-flomo-color-tag-scope="sidebar"] {
+  background-color: var(--flomo-color-tag-background) !important;
+  border: 1px solid var(--flomo-color-tag-border) !important;
+  border-radius: 0.38em !important;
+  box-sizing: border-box !important;
+  color: var(--flomo-color-tag-text) !important;
+  /* 不改变侧边栏原有 flex/grid 布局和行高，避免文字被裁切。 */
+  padding: 0 !important;
+  text-decoration-color: currentColor !important;
+}
+
+/* flomo 用绿色背景表示当前选中标签。常见的选中属性或类命中时，撤回色块，
+   让原生选中态保持唯一且清晰的语义。 */
+[data-flomo-color-tag="true"][data-flomo-color-tag-scope="sidebar"]:is(
+  [aria-current], [aria-selected="true"], [data-active="true"], [data-selected="true"],
+  [data-state="active"], [data-state="selected"], .active, .selected, .current, .is-active, .is-selected, .is-current
+),
+:is(
+  [aria-current], [aria-selected="true"], [data-active="true"], [data-selected="true"],
+  [data-state="active"], [data-state="selected"], .active, .selected, .current, .is-active, .is-selected, .is-current
+) [data-flomo-color-tag="true"][data-flomo-color-tag-scope="sidebar"] {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+}
+
+[data-flomo-color-tag="true"] *,
+[data-flomo-color-tag="true"]:visited {
+  color: inherit !important;
+}

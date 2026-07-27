@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>flomo 彩色标签设置</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <p class="eyebrow">flomo 彩色标签</p>
+        <h1>显示设置</h1>
+        <p class="subtle">所有设置都只保存在当前浏览器；扩展不会上传或保存笔记正文。</p>
+      </header>
+
+      <section class="panel settings-panel" aria-labelledby="visibility-heading">
+        <h2 id="visibility-heading">启用范围</h2>
+        <label class="toggle"><input id="enabled" type="checkbox"> <span>启用彩色标签</span></label>
+        <label class="toggle"><input id="content-enabled" type="checkbox"> <span>正文和搜索结果中显示</span></label>
+        <label class="toggle"><input id="sidebar-enabled" type="checkbox"> <span>侧边栏中显示</span></label>
+        <label class="color-mode">
+          着色方式
+          <select id="color-mode">
+            <option value="manual">仅给指定标签着色</option>
+            <option value="automatic">全部标签自动配色</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="panel" aria-labelledby="rule-heading">
+        <h2 id="rule-heading">添加颜色规则</h2>
+        <p class="subtle">已设置颜色的标签会带动其下属标签同色；完整子标签的颜色规则优先。自动模式也可为未设置颜色的标签生成稳定配色。</p>
+        <form id="rule-form" class="rule-form">
+          <label>
+            标签
+            <input id="tag-name" type="text" placeholder="例如：工作 或 工作/紧急" autocomplete="off" required>
+          </label>
+          <label>
+            预设颜色
+            <select id="palette-name"></select>
+          </label>
+          <label id="custom-color-wrap" hidden>
+            自定义颜色
+            <span class="custom-color-inputs">
+              <input id="custom-color" type="color" value="#2563eb" aria-label="选择自定义颜色">
+              <input id="custom-color-code" type="text" value="#2563eb" placeholder="#2563eb" spellcheck="false" autocomplete="off" aria-label="自定义颜色代码">
+            </span>
+          </label>
+          <button type="submit">保存规则</button>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="colored-heading">
+        <h2 id="colored-heading">已着色标签</h2>
+        <p class="subtle">这里只显示已设置颜色的标签。修改颜色、移除规则，或在上方输入新标签名即可管理。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>标签</th><th>颜色</th><th></th></tr></thead>
+            <tbody id="colored-tags"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="backup-heading">
+        <h2 id="backup-heading">备份与恢复</h2>
+        <div class="backup-actions">
+          <button id="export-settings" type="button">导出设置</button>
+          <label class="file-button">导入设置<input id="import-settings" type="file" accept="application/json,.json"></label>
+          <button id="reset-settings" class="danger-button" type="button">恢复默认设置</button>
+        </div>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+    <script src="../src/tag-colors.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

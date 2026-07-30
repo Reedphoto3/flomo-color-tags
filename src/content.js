@@ -112,13 +112,14 @@
     for (const attribute of attributes) {
       const value = element.getAttribute(attribute);
       if (value && value.trim()) {
-        return value.trim();
+        return isSidebarTag(element) ? colors.stripSidebarCount(value) : value.trim();
       }
     }
 
     // 展开一级标签后，外层容器会同时包含父标签和全部子标签。
     // 先取 DOM 顺序中第一个有效叶节点，避免把整个展开组拼成颜色键。
-    return getFirstLeafTagText(element) || (element.textContent || "").replace(/\s+/g, " ").trim();
+    const rawText = getFirstLeafTagText(element) || (element.textContent || "").replace(/\s+/g, " ").trim();
+    return isSidebarTag(element) ? colors.stripSidebarCount(rawText) : rawText;
   }
 
   function hasTagClass(element) {
@@ -263,16 +264,12 @@
     const bodyText = body ? `${body.className || ""} ${body.getAttribute("data-theme") || ""}` : "";
     const explicitTheme = `${rootText} ${bodyText}`.toLowerCase();
 
-    if (/(^|\s|[-_])dark($|\s|[-_])/.test(explicitTheme)) {
-      return true;
-    }
-
     const colorScheme = getComputedStyle(root).colorScheme;
-    if (colorScheme && colorScheme.includes("dark")) {
-      return true;
-    }
-
-    return globalThis.matchMedia && globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+    const prefersDark = Boolean(
+      globalThis.matchMedia &&
+      globalThis.matchMedia("(prefers-color-scheme: dark)").matches
+    );
+    return colors.resolveDarkTheme(explicitTheme, colorScheme, prefersDark);
   }
 
   function clearElementStyle(element) {

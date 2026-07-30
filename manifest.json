@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "flomo 彩色标签",
   "description": "在 flomo 网页端按标签显示稳定、可自定义的颜色。所有处理均在本地完成。",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "permissions": ["storage"],
   "content_scripts": [
     {

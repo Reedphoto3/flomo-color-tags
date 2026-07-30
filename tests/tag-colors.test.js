@@ -7,6 +7,7 @@ const colors = require("../src/tag-colors.js");
 const detection = require("../src/tag-detection.js");
 const rendering = require("../src/tag-rendering.js");
 const presets = require("../src/starter-presets.js");
+const settingsTools = require("../src/settings-tools.js");
 
 const FIXTURE_DIRECTORY = path.join(__dirname, "fixtures");
 
@@ -316,4 +317,131 @@ test("重复应用模板不会制造重复规则或异常", () => {
   assert.equal(second.added, 0);
   assert.equal(second.conflicts, 12);
   assert.equal(second.preserved, 12);
+});
+
+test("规则按层级展示并标明显式设置和继承来源", () => {
+  const rows = settingsTools.buildRuleHierarchy({
+    "工作": "indigo",
+    "工作/项目/A": "sky",
+    "个人": "jade"
+  });
+  assert.deepEqual(
+    rows.map(({ tag, depth, explicit, sourceTag, color }) => ({
+      tag,
+      depth,
+      explicit,
+      sourceTag,
+      color
+    })),
+    [
+      { tag: "个人", depth: 0, explicit: true, sourceTag: null, color: "jade" },
+      { tag: "工作", depth: 0, explicit: true, sourceTag: null, color: "indigo" },
+      { tag: "工作/项目", depth: 1, explicit: false, sourceTag: "工作", color: "indigo" },
+      { tag: "工作/项目/A", depth: 2, explicit: true, sourceTag: null, color: "sky" }
+    ]
+  );
+});
+
+test("规则支持名称、颜色和自定义十六进制筛选", () => {
+  const rows = settingsTools.buildRuleHierarchy({
+    "工作": "indigo",
+    "工作/项目": "#8b5cf6",
+    "个人": "jade"
+  });
+  assert.deepEqual(
+    settingsTools.filterRuleRows(rows, { query: "项目" }, colors).map((row) => row.tag),
+    ["工作/项目"]
+  );
+  assert.deepEqual(
+    settingsTools.filterRuleRows(rows, { color: "jade" }, colors).map((row) => row.tag),
+    ["个人"]
+  );
+  assert.deepEqual(
+    settingsTools.filterRuleRows(rows, { customOnly: true }, colors).map((row) => row.tag),
+    ["工作/项目"]
+  );
+});
+
+test("批量添加会先解析有效、重复、冲突和无效规则", () => {
+  const analysis = settingsTools.parseBatchRules(
+    [
+      "工作 = indigo",
+      "个人 = jade",
+      "摄影 = #8b5cf6",
+      "学习/医学 = sky",
+      "摄影 = coral",
+      "错误行",
+      "问题 = rainbow"
+    ].join("\n"),
+    { "工作": "rose" },
+    colors
+  );
+  assert.equal(analysis.valid, 4);
+  assert.equal(analysis.conflicts, 1);
+  assert.equal(analysis.duplicates, 1);
+  assert.equal(analysis.invalid, 3);
+
+  const safe = settingsTools.applyBatchRules({ "工作": "rose" }, analysis);
+  assert.equal(safe.overrides["工作"], "rose");
+  assert.equal(safe.overrides["摄影"], "#8b5cf6");
+  assert.equal(safe.preserved, 1);
+
+  const overwrite = settingsTools.applyBatchRules({ "工作": "rose" }, analysis, true);
+  assert.equal(overwrite.overrides["工作"], "indigo");
+  assert.equal(overwrite.overwritten, 1);
+});
+
+test("新备份包含元数据、版本和日期文件名", () => {
+  const date = new Date("2026-07-30T06:00:00.000Z");
+  const settings = colors.cloneDefaultSettings();
+  settings.overrides = { "工作": "indigo" };
+  const backup = settingsTools.createBackup(settings, "0.2.1", date);
+  assert.deepEqual(backup, {
+    format: "flomo-color-tags-backup",
+    formatVersion: 1,
+    extensionVersion: "0.2.1",
+    exportedAt: "2026-07-30T06:00:00.000Z",
+    settings
+  });
+  assert.equal(
+    settingsTools.createBackupFilename(new Date(2026, 6, 30)),
+    "flomo-color-tags-backup-2026-07-30.json"
+  );
+});
+
+test("恢复配置兼容旧 JSON 和新备份，并统计问题规则", () => {
+  const sourceSettings = {
+    settingsVersion: 9,
+    enabled: false,
+    overrides: {
+      "#工作": "indigo",
+      "工作": "rose",
+      "个人": "jade",
+      "错误": "rainbow"
+    }
+  };
+  const legacy = settingsTools.parseBackupPayload({ version: 1, settings: sourceSettings }, colors);
+  assert.equal(legacy.format, "legacy-wrapper");
+  assert.deepEqual(legacy.stats, { validRules: 2, duplicateRules: 1, invalidRules: 1 });
+  assert.equal(legacy.settings.enabled, false);
+  assert.deepEqual(legacy.settings.overrides, { "工作": "indigo", "个人": "jade" });
+
+  const modern = settingsTools.parseBackupPayload(
+    settingsTools.createBackup(sourceSettings, "0.2.1", new Date("2026-07-30T06:00:00.000Z")),
+    colors
+  );
+  assert.equal(modern.format, "backup");
+  assert.deepEqual(modern.stats, legacy.stats);
+  assert.equal(modern.settings.settingsVersion, 9);
+});
+
+test("损坏或不受支持的备份会明确拒绝", () => {
+  assert.throws(
+    () => settingsTools.parseBackupPayload({ format: "flomo-color-tags-backup", formatVersion: 99, settings: {} }, colors),
+    /不支持/
+  );
+  assert.throws(
+    () => settingsTools.parseBackupPayload({ settingsVersion: 9 }, colors),
+    /缺少颜色规则/
+  );
 });

@@ -48,6 +48,11 @@
     elements.status.style.color = isError ? "#b42318" : "";
   }
 
+  function clearTemplateUndo() {
+    templateUndoChanges = null;
+    elements.undoTemplate.disabled = true;
+  }
+
   function addPaletteOptions(select, customColor) {
     select.replaceChildren();
     for (const palette of colors.paletteEntries()) {
@@ -382,8 +387,7 @@
     }
     const result = presets.applyTemplateUndo(settings.overrides, templateUndoChanges);
     settings.overrides = result.overrides;
-    templateUndoChanges = null;
-    elements.undoTemplate.disabled = true;
+    clearTemplateUndo();
     await saveSettings(
       `已撤销模板影响的 ${result.reverted} 条规则；保留模板应用后的 ${result.preserved} 条同名修改。`
     );
@@ -499,6 +503,7 @@
         setStatus("已取消恢复，当前设置没有变化。");
         return;
       }
+      clearTemplateUndo();
       settings = restored.settings;
       await saveSettings(
         `配置已恢复：有效 ${validRules} 条，重复 ${duplicateRules} 条，无效 ${invalidRules} 条。`
@@ -514,6 +519,7 @@
     if (!globalThis.confirm("恢复默认显示和白名单配色？现有自定义颜色规则会被删除。")) {
       return;
     }
+    clearTemplateUndo();
     settings = colors.cloneDefaultSettings();
     await saveSettings("已恢复默认设置。");
   });

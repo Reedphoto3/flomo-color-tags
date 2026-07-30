@@ -630,6 +630,46 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   assert.equal(storedSettings.overrides["模板后新增"], "coral");
   assert.equal(Object.hasOwn(storedSettings.overrides, "个人"), false);
 
+  document.querySelector("#apply-template").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(storedSettings.overrides["个人"], "jade");
+  assert.equal(document.querySelector("#undo-template").disabled, false);
+
+  const restoredSettings = {
+    ...colors.cloneDefaultSettings(),
+    contentEnabled: false,
+    overrides: {
+      "工作": "indigo",
+      "工作/项目/A": "sky",
+      "摄影": "#8b5cf6",
+      "个人": "jade",
+      "医学": "coral",
+      "模板后新增": "coral"
+    }
+  };
+  const importSettings = document.querySelector("#import-settings");
+  Object.defineProperty(importSettings, "files", {
+    configurable: true,
+    value: [{
+      text: async () => JSON.stringify(
+        settingsTools.createBackup(
+          restoredSettings,
+          "0.2.1",
+          new Date("2026-07-30T06:00:00.000Z")
+        )
+      )
+    }]
+  });
+  importSettings.dispatchEvent(new window.Event("change"));
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(document.querySelector("#undo-template").disabled, true);
+  document.querySelector("#undo-template").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(storedSettings.overrides["个人"], "jade");
+  assert.equal(storedSettings.overrides["医学"], "coral");
+
   const search = document.querySelector("#rule-search");
   search.value = "项目";
   search.dispatchEvent(new window.Event("input"));

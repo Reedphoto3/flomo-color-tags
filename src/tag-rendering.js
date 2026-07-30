@@ -27,15 +27,13 @@
       const rootText = [
         root.className || "",
         root.getAttribute("data-theme") || "",
-        root.getAttribute("data-color-mode") || "",
-        root.getAttribute("style") || ""
+        root.getAttribute("data-color-mode") || ""
       ].join(" ");
       const bodyText = body
         ? [
             body.className || "",
             body.getAttribute("data-theme") || "",
-            body.getAttribute("data-color-mode") || "",
-            body.getAttribute("style") || ""
+            body.getAttribute("data-color-mode") || ""
           ].join(" ")
         : "";
       const colorScheme = typeof getComputedStyle === "function"

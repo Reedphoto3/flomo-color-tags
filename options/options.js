@@ -40,7 +40,7 @@
 
   let settings = colors.cloneDefaultSettings();
   let templateRows = presets.createTemplateRows("mixed");
-  let templateUndoSnapshot = null;
+  let templateUndoChanges = null;
   let batchAnalysis = null;
 
   function setStatus(message, isError) {
@@ -308,6 +308,7 @@
     await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
     updateInputs();
     renderColoredTags();
+    renderTemplateSummary();
     setStatus(message || "设置已保存。");
   }
 
@@ -316,6 +317,7 @@
     settings = colors.sanitizeSettings(stored[SETTINGS_KEY]);
     updateInputs();
     renderColoredTags();
+    renderTemplateSummary();
   }
 
   elements.paletteName.addEventListener("change", () => {
@@ -363,24 +365,28 @@
       setStatus("模板中仍有无效标签名或颜色，请先修正。", true);
       return;
     }
-    templateUndoSnapshot = structuredClone(settings);
+    templateUndoChanges = presets.createTemplateUndo(
+      settings.overrides,
+      analysis.overrides
+    );
     settings.overrides = analysis.overrides;
-    elements.undoTemplate.disabled = false;
+    elements.undoTemplate.disabled = templateUndoChanges.length === 0;
     await saveSettings(
       `模板已应用：新增 ${analysis.added} 条，保留 ${analysis.preserved} 条，覆盖 ${analysis.overwritten} 条。`
     );
-    renderTemplateSummary();
   });
 
   elements.undoTemplate.addEventListener("click", async () => {
-    if (!templateUndoSnapshot) {
+    if (!templateUndoChanges) {
       return;
     }
-    settings = templateUndoSnapshot;
-    templateUndoSnapshot = null;
+    const result = presets.applyTemplateUndo(settings.overrides, templateUndoChanges);
+    settings.overrides = result.overrides;
+    templateUndoChanges = null;
     elements.undoTemplate.disabled = true;
-    await saveSettings("已撤销本次模板应用。");
-    renderTemplateSummary();
+    await saveSettings(
+      `已撤销模板影响的 ${result.reverted} 条规则；保留模板应用后的 ${result.preserved} 条同名修改。`
+    );
   });
 
   for (const control of [elements.ruleSearch, elements.ruleColorFilter, elements.ruleCustomOnly]) {
@@ -411,6 +417,13 @@
   });
 
   elements.applyBatch.addEventListener("click", async () => {
+    // 点击确认时重新解析，避免预览后新增的同名规则绕过“不覆盖”保护。
+    batchAnalysis = settingsTools.parseBatchRules(
+      elements.batchRules.value,
+      settings.overrides,
+      colors
+    );
+    renderBatchPreview();
     if (!batchAnalysis || batchAnalysis.invalid) {
       return;
     }

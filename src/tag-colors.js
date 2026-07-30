@@ -291,10 +291,9 @@
   }
 
   function resolveTagAppearance(value, overrides, fallbackToAuto = true) {
-    // 白名单模式中，已指定颜色的父标签会将同一颜色延伸给下属标签；
-    // 完整子标签规则优先。自动模式仍按一级标签计算稳定颜色。
-    const override = getOverride(value, overrides, fallbackToAuto)
-      || (!fallbackToAuto ? getDescendantOverride(value, overrides) : null);
+    // 两种模式都优先使用完整标签或最近的显式父标签规则。
+    // 只有自动模式在完全找不到显式规则时才生成稳定颜色。
+    const override = getDescendantOverride(value, overrides);
     const requested = typeof override === "string" ? override.trim().toLowerCase() : "";
 
     if (isHexColor(requested)) {

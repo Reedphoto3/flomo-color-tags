@@ -80,7 +80,22 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-hei
 .batch-preview ul { margin: 0; padding-left: 22px; }
 
 .backup-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.file-button input { display: none; }
+.file-button { position: relative; }
+.file-button input {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+.file-button:focus-within {
+  box-shadow: 0 0 0 3px rgb(91 91 214 / 28%);
+  outline: 2px solid transparent;
+}
 .status { color: #16713d; min-height: 1.5em; padding: 14px 2px 0; }
 
 @media (max-width: 720px) {

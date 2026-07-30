@@ -124,11 +124,13 @@
     let preserved = 0;
     let overwritten = 0;
     for (const entry of analysis.entries || []) {
-      if (entry.conflict && !overwrite) {
+      // 预览和确认之间设置可能已经变化，写入时必须以当前数据为准。
+      const conflict = Object.prototype.hasOwnProperty.call(merged, entry.tag);
+      if (conflict && !overwrite) {
         preserved += 1;
         continue;
       }
-      if (entry.conflict) {
+      if (conflict) {
         if (merged[entry.tag] !== entry.color) {
           overwritten += 1;
         } else {
@@ -183,6 +185,19 @@
     if (!sourceSettings || typeof sourceSettings !== "object" || Array.isArray(sourceSettings)) {
       throw new Error("备份中缺少有效设置");
     }
+    const currentSettingsVersion = colors.DEFAULT_SETTINGS.settingsVersion;
+    const sourceSettingsVersion = sourceSettings.settingsVersion;
+    if (
+      sourceSettingsVersion !== undefined
+      && (!Number.isInteger(sourceSettingsVersion) || sourceSettingsVersion < 1)
+    ) {
+      throw new Error("备份中的设置版本无效");
+    }
+    if (sourceSettingsVersion > currentSettingsVersion) {
+      throw new Error(
+        `备份设置版本 ${sourceSettingsVersion} 高于当前支持的 ${currentSettingsVersion}，请使用更新版本扩展恢复`
+      );
+    }
     const rawOverrides = sourceSettings.overrides;
     if (!rawOverrides || typeof rawOverrides !== "object" || Array.isArray(rawOverrides)) {
       throw new Error("备份中缺少颜色规则");
@@ -209,7 +224,9 @@
 
     const settings = colors.sanitizeSettings({
       ...sourceSettings,
-      settingsVersion: colors.DEFAULT_SETTINGS.settingsVersion,
+      // 缺失或较旧的版本沿用当前明确的导入迁移：保留经验证的
+      // 通用设置与颜色规则，再交给当前版本的清洗逻辑。
+      settingsVersion: currentSettingsVersion,
       overrides
     });
     return Object.freeze({

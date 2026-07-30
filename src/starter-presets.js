@@ -100,9 +100,65 @@
     });
   }
 
+  function createTemplateUndo(previousOverrides, appliedOverrides) {
+    const previous = previousOverrides && typeof previousOverrides === "object"
+      ? previousOverrides
+      : {};
+    const applied = appliedOverrides && typeof appliedOverrides === "object"
+      ? appliedOverrides
+      : {};
+    const changes = [];
+    const tags = new Set([...Object.keys(previous), ...Object.keys(applied)]);
+
+    for (const tag of tags) {
+      const hadPrevious = Object.prototype.hasOwnProperty.call(previous, tag);
+      const hasApplied = Object.prototype.hasOwnProperty.call(applied, tag);
+      const previousValue = previous[tag];
+      const appliedValue = applied[tag];
+      if (hadPrevious === hasApplied && previousValue === appliedValue) {
+        continue;
+      }
+      changes.push(Object.freeze({
+        tag,
+        hadPrevious,
+        previousValue,
+        hasApplied,
+        appliedValue
+      }));
+    }
+
+    return Object.freeze(changes);
+  }
+
+  function applyTemplateUndo(currentOverrides, changes) {
+    const overrides = { ...(currentOverrides || {}) };
+    let reverted = 0;
+    let preserved = 0;
+
+    for (const change of Array.isArray(changes) ? changes : []) {
+      const hasCurrent = Object.prototype.hasOwnProperty.call(overrides, change.tag);
+      const stillMatchesTemplate = hasCurrent === change.hasApplied
+        && (!hasCurrent || overrides[change.tag] === change.appliedValue);
+      if (!stillMatchesTemplate) {
+        preserved += 1;
+        continue;
+      }
+      if (change.hadPrevious) {
+        overrides[change.tag] = change.previousValue;
+      } else {
+        delete overrides[change.tag];
+      }
+      reverted += 1;
+    }
+
+    return Object.freeze({ overrides, reverted, preserved });
+  }
+
   return Object.freeze({
     STARTER_CATEGORIES,
     createTemplateRows,
-    analyzeTemplateMerge
+    analyzeTemplateMerge,
+    createTemplateUndo,
+    applyTemplateUndo
   });
 });

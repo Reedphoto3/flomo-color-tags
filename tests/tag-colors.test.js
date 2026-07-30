@@ -64,6 +64,17 @@ test("完整标签规则优先于一级标签规则", () => {
   assert.equal(colors.resolveTagAppearance("示例根目录/紧急", overrides).paletteName, "coral");
 });
 
+test("自动模式优先继承最近的中间层父标签规则", () => {
+  assert.equal(
+    colors.resolveTagAppearance(
+      "工作/项目/任务",
+      { "工作": "sky", "工作/项目": "rose" },
+      true
+    ).paletteName,
+    "rose"
+  );
+});
+
 test("白名单模式不会为未指定标签生成自动颜色", () => {
   assert.equal(colors.resolveTagAppearance("未着色示例", {}, false), null);
   assert.equal(colors.resolveTagAppearance("已着色示例", { "已着色示例": "indigo" }, false).paletteName, "indigo");
@@ -254,6 +265,21 @@ test("fixture 中的显式浅色和深色主题优先于系统偏好", () => {
   assert.equal(darkDocument.querySelector("#dark-tag").dataset.flomoColorTagTheme, "dark");
 });
 
+test("style 中同时出现 light 和 dark 字样不会被当作显式深色主题", () => {
+  const { document } = loadFixture("content-tag.html");
+  document.documentElement.setAttribute(
+    "style",
+    "color-scheme: light dark; --light-surface: #fff; --dark-surface: #111"
+  );
+  const renderer = createTestRenderer(
+    document,
+    { "灵感": "violet" },
+    { colorScheme: "light dark", prefersDark: false }
+  );
+  renderer.processRoot(document);
+  assert.equal(document.querySelector("#content-tag").dataset.flomoColorTagTheme, "light");
+});
+
 test("属性观察覆盖标签复用所需字段", () => {
   for (const attribute of ["tag", "data-tag", "data-tag-name", "data-tag-path", "href"]) {
     assert.ok(detection.OBSERVED_TAG_ATTRIBUTES.includes(attribute), attribute);
@@ -263,6 +289,7 @@ test("属性观察覆盖标签复用所需字段", () => {
 test("原生绿色选中状态的 CSS 优先撤回插件色块", () => {
   const css = fs.readFileSync(path.join(__dirname, "../src/content.css"), "utf8");
   assert.match(css, /\[aria-selected="true"\]/);
+  assert.match(css, /\[aria-current\]:not\(\[aria-current="false"\]\)/);
   assert.match(css, /background-color:\s*transparent\s*!important/);
   assert.match(css, /color:\s*inherit\s*!important/);
 });
@@ -324,6 +351,29 @@ test("重复应用模板不会制造重复规则或异常", () => {
   assert.equal(second.added, 0);
   assert.equal(second.conflicts, 12);
   assert.equal(second.preserved, 12);
+});
+
+test("撤销模板只回滚模板仍拥有的规则并保留后续修改", () => {
+  const previous = { "工作": "rose", "自有标签": "teal" };
+  const applied = presets.analyzeTemplateMerge(
+    previous,
+    presets.createTemplateRows("zh"),
+    { colors, overwrite: true }
+  ).overrides;
+  const undo = presets.createTemplateUndo(previous, applied);
+  const current = {
+    ...applied,
+    "工作": "coral",
+    "模板后新增": "sky"
+  };
+  const result = presets.applyTemplateUndo(current, undo);
+
+  assert.equal(result.overrides["工作"], "coral");
+  assert.equal(result.overrides["自有标签"], "teal");
+  assert.equal(result.overrides["模板后新增"], "sky");
+  assert.equal(Object.hasOwn(result.overrides, "个人"), false);
+  assert.equal(result.reverted, 5);
+  assert.equal(result.preserved, 1);
 });
 
 test("规则按层级展示并标明显式设置和继承来源", () => {
@@ -398,6 +448,16 @@ test("批量添加会先解析有效、重复、冲突和无效规则", () => {
   assert.equal(overwrite.overwritten, 1);
 });
 
+test("批量确认时重新检查当前规则而不是信任预览冲突状态", () => {
+  const preview = settingsTools.parseBatchRules("工作 = indigo", {}, colors);
+  assert.equal(preview.entries[0].conflict, false);
+
+  const result = settingsTools.applyBatchRules({ "工作": "rose" }, preview, false);
+  assert.equal(result.overrides["工作"], "rose");
+  assert.equal(result.added, 0);
+  assert.equal(result.preserved, 1);
+});
+
 test("新备份包含元数据、版本和日期文件名", () => {
   const date = new Date("2026-07-30T06:00:00.000Z");
   const settings = colors.cloneDefaultSettings();
@@ -440,6 +500,19 @@ test("恢复配置兼容旧 JSON 和新备份，并统计问题规则", () => {
   assert.equal(modern.format, "backup");
   assert.deepEqual(modern.stats, legacy.stats);
   assert.equal(modern.settings.settingsVersion, 9);
+
+  const older = settingsTools.parseBackupPayload({
+    settingsVersion: 8,
+    overrides: { "旧版规则": "teal" }
+  }, colors);
+  assert.equal(older.settings.settingsVersion, 9);
+  assert.deepEqual(older.settings.overrides, { "旧版规则": "teal" });
+
+  const versionless = settingsTools.parseBackupPayload({
+    overrides: { "无版本规则": "amber" }
+  }, colors);
+  assert.equal(versionless.settings.settingsVersion, 9);
+  assert.deepEqual(versionless.settings.overrides, { "无版本规则": "amber" });
 });
 
 test("损坏或不受支持的备份会明确拒绝", () => {
@@ -450,6 +523,14 @@ test("损坏或不受支持的备份会明确拒绝", () => {
   assert.throws(
     () => settingsTools.parseBackupPayload({ settingsVersion: 9 }, colors),
     /缺少颜色规则/
+  );
+  assert.throws(
+    () => settingsTools.parseBackupPayload({ settingsVersion: 10, overrides: {} }, colors),
+    /高于当前支持的 9/
+  );
+  assert.throws(
+    () => settingsTools.parseBackupPayload({ settingsVersion: "10", overrides: {} }, colors),
+    /设置版本无效/
   );
 });
 
@@ -527,16 +608,56 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   language.dispatchEvent(new window.Event("change"));
   assert.equal(document.querySelectorAll("#template-rows tr").length, 10);
 
+  document.querySelector("#apply-template").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(storedSettings.overrides["个人"], "jade");
+
+  const contentEnabled = document.querySelector("#content-enabled");
+  contentEnabled.checked = false;
+  contentEnabled.dispatchEvent(new window.Event("change"));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const tagName = document.querySelector("#tag-name");
+  tagName.value = "模板后新增";
+  document.querySelector("#rule-form").dispatchEvent(
+    new window.Event("submit", { bubbles: true, cancelable: true })
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  document.querySelector("#undo-template").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(storedSettings.contentEnabled, false);
+  assert.equal(storedSettings.overrides["模板后新增"], "coral");
+  assert.equal(Object.hasOwn(storedSettings.overrides, "个人"), false);
+
   const search = document.querySelector("#rule-search");
   search.value = "项目";
   search.dispatchEvent(new window.Event("input"));
   assert.equal(document.querySelectorAll("#colored-tags tr").length, 2);
 
   const batch = document.querySelector("#batch-rules");
+  batch.value = "预览后新增 = indigo";
+  batch.dispatchEvent(new window.Event("input"));
+  document.querySelector("#preview-batch").click();
+  assert.equal(document.querySelector("#apply-batch").disabled, false);
+
+  tagName.value = "预览后新增";
+  document.querySelector("#rule-form").dispatchEvent(
+    new window.Event("submit", { bubbles: true, cancelable: true })
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  document.querySelector("#apply-batch").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(storedSettings.overrides["预览后新增"], "coral");
+
   batch.value = "个人 = jade\n问题 = rainbow";
   batch.dispatchEvent(new window.Event("input"));
   document.querySelector("#preview-batch").click();
   assert.match(document.querySelector("#batch-preview").textContent, /有效规则：1/);
   assert.match(document.querySelector("#batch-preview").textContent, /无效规则：1/);
   assert.equal(document.querySelector("#apply-batch").disabled, true);
+
+  const optionsCss = fs.readFileSync(path.join(__dirname, "../options/options.css"), "utf8");
+  assert.doesNotMatch(optionsCss, /\.file-button input\s*\{[^}]*display:\s*none/s);
+  assert.match(optionsCss, /\.file-button:focus-within/);
 });

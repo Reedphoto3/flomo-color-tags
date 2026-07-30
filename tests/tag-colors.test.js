@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 const { parseHTML } = require("linkedom");
 const colors = require("../src/tag-colors.js");
 const detection = require("../src/tag-detection.js");
@@ -166,6 +167,12 @@ test("标签候选框、普通 tag 字样和多标签父容器不会误染", () 
     detection.isLikelyTagElement(nestedDocument.querySelector("#expanded-group"), colors),
     false
   );
+
+  const sidebarDocument = loadFixture("sidebar-root-tag.html").document;
+  assert.equal(
+    detection.isLikelyTagElement(sidebarDocument.querySelector("#sidebar-icon"), colors),
+    false
+  );
 });
 
 test("侧栏 DOM 提取保留数字标签并移除明确数量", () => {
@@ -248,7 +255,7 @@ test("fixture 中的显式浅色和深色主题优先于系统偏好", () => {
 });
 
 test("属性观察覆盖标签复用所需字段", () => {
-  for (const attribute of ["data-tag", "data-tag-name", "data-tag-path", "href"]) {
+  for (const attribute of ["tag", "data-tag", "data-tag-name", "data-tag-path", "href"]) {
     assert.ok(detection.OBSERVED_TAG_ATTRIBUTES.includes(attribute), attribute);
   }
 });
@@ -444,4 +451,92 @@ test("损坏或不受支持的备份会明确拒绝", () => {
     () => settingsTools.parseBackupPayload({ settingsVersion: 9 }, colors),
     /缺少颜色规则/
   );
+});
+
+test("设置页能完整加载并执行模板、筛选和批量预览", async () => {
+  const html = fs.readFileSync(path.join(__dirname, "../options/options.html"), "utf8");
+  const { document, window } = parseHTML(html);
+  Object.defineProperty(window.HTMLSelectElement.prototype, "value", {
+    configurable: true,
+    get() {
+      const selected = Array.from(this.options).find((option) => option.selected);
+      return (selected || this.options[0])?.value || "";
+    },
+    set(value) {
+      for (const option of this.options) {
+        option.selected = option.value === value;
+      }
+    }
+  });
+  let storedSettings = {
+    ...colors.cloneDefaultSettings(),
+    overrides: {
+      "工作": "indigo",
+      "工作/项目/A": "sky",
+      "摄影": "#8b5cf6"
+    }
+  };
+  const chrome = {
+    runtime: {
+      getManifest: () => ({ version: "0.2.1" })
+    },
+    storage: {
+      local: {
+        get: async () => ({ settings: storedSettings }),
+        set: async ({ settings }) => {
+          storedSettings = settings;
+        }
+      },
+      onChanged: {
+        addListener: () => {}
+      }
+    }
+  };
+  const context = vm.createContext({
+    ...window,
+    window,
+    document,
+    chrome,
+    Blob,
+    URL,
+    console,
+    structuredClone,
+    setTimeout,
+    clearTimeout,
+    confirm: () => true
+  });
+  context.globalThis = context;
+  for (const file of [
+    "../src/tag-colors.js",
+    "../src/starter-presets.js",
+    "../src/settings-tools.js",
+    "../options/options.js"
+  ]) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context, {
+      filename: file
+    });
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(document.querySelectorAll("#template-rows tr").length, 20);
+  assert.match(document.querySelector("#template-summary").textContent, /将新增/);
+  assert.equal(document.querySelectorAll("#colored-tags tr").length, 4);
+
+  const language = document.querySelector("#template-language");
+  language.value = "zh";
+  language.dispatchEvent(new window.Event("change"));
+  assert.equal(document.querySelectorAll("#template-rows tr").length, 10);
+
+  const search = document.querySelector("#rule-search");
+  search.value = "项目";
+  search.dispatchEvent(new window.Event("input"));
+  assert.equal(document.querySelectorAll("#colored-tags tr").length, 2);
+
+  const batch = document.querySelector("#batch-rules");
+  batch.value = "个人 = jade\n问题 = rainbow";
+  batch.dispatchEvent(new window.Event("input"));
+  document.querySelector("#preview-batch").click();
+  assert.match(document.querySelector("#batch-preview").textContent, /有效规则：1/);
+  assert.match(document.querySelector("#batch-preview").textContent, /无效规则：1/);
+  assert.equal(document.querySelector("#apply-batch").disabled, true);
 });

@@ -10,6 +10,7 @@
   "use strict";
 
   const TAG_SELECTOR = [
+    "[tag]",
     "[data-tag]",
     "[data-tag-name]",
     "[data-tag-path]",
@@ -20,6 +21,7 @@
   ].join(",");
   const APPLIED_SELECTOR = "[data-flomo-color-tag='true']";
   const OBSERVED_TAG_ATTRIBUTES = Object.freeze([
+    "tag",
     "data-tag",
     "data-tag-name",
     "data-tag-path",
@@ -80,11 +82,31 @@
     );
   }
 
+  function getSidebarTagOwner(element) {
+    if (!isSidebarTag(element)) {
+      return null;
+    }
+    if (element.hasAttribute("tag")) {
+      return element;
+    }
+    if (element.matches(".tag-label, [class~='tag-label']")) {
+      return element.closest("[tag]");
+    }
+    return null;
+  }
+
   function getRawTagText(element, colors) {
     for (const attribute of ["data-tag", "data-tag-name", "data-tag-path"]) {
       const value = element.getAttribute(attribute);
       if (value && value.trim()) {
         return isSidebarTag(element) ? colors.stripSidebarCount(value) : value.trim();
+      }
+    }
+    if (isSidebarTag(element)) {
+      const tagOwner = getSidebarTagOwner(element);
+      const tagPath = tagOwner && tagOwner.getAttribute("tag");
+      if (tagPath && tagPath.trim()) {
+        return colors.stripSidebarCount(tagPath);
       }
     }
 
@@ -102,7 +124,9 @@
 
   function hasTagSignal(element, rawText) {
     const href = element.getAttribute("href") || "";
+    const structuralTag = getSidebarTagOwner(element);
     return Boolean(
+      structuralTag ||
       element.hasAttribute("data-tag") ||
       element.hasAttribute("data-tag-name") ||
       element.hasAttribute("data-tag-path") ||
@@ -114,7 +138,9 @@
 
   function hasStrongTagSignal(element, rawText) {
     const href = element.getAttribute("href") || "";
+    const structuralTag = getSidebarTagOwner(element);
     return Boolean(
+      structuralTag ||
       element.hasAttribute("data-tag") ||
       element.hasAttribute("data-tag-name") ||
       element.hasAttribute("data-tag-path") ||
@@ -232,7 +258,7 @@
       !hasStrongTagSignal(element, rawText) &&
       element.parentElement &&
       element.parentElement.closest(
-        "[data-tag], [data-tag-name], [data-tag-path], a[href*='tag']"
+        "[tag], [data-tag], [data-tag-name], [data-tag-path], a[href*='tag']"
       )
     ) {
       return false;

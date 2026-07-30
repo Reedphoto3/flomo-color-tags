@@ -1,14 +1,31 @@
 <!doctype html>
 <html>
   <body>
-    <aside id="memo-sidebar">
-      <section id="expanded-group" class="tag-tree" data-tag="工作">
-        <a id="tag-root" class="tag-item" data-tag-path="工作" href="/tag/work">工作</a>
-        <div class="tag-children">
-          <a id="tag-child" class="tag-item" data-tag-path="工作/项目" href="/tag/work/project">项目</a>
-          <a id="tag-grandchild" class="tag-item" data-tag-path="工作/项目/A" href="/tag/work/project/a">A</a>
-        </div>
-      </section>
+    <aside class="sidebar"><div id="sidebar">
+      <ul class="tags">
+        <li class="tag showChildren" tag="工作">
+          <div class="tag-wrap"><div class="tag-left">
+            <button class="tag-expand-button" aria-label="收起"></button>
+            <div id="tag-root" class="tag-label typography-body" title="工作"><span>工作</span></div>
+          </div></div>
+          <ul class="tag_ul children_ul">
+            <li class="tag showChildren" tag="工作/项目">
+              <div class="tag-wrap"><div class="tag-left">
+                <button class="tag-expand-button" aria-label="收起"></button>
+                <div id="tag-child" class="tag-label typography-body" title="项目"><span>项目</span></div>
+              </div></div>
+              <ul class="tag_ul children_ul">
+                <li class="tag no_children" tag="工作/项目/A">
+                  <div class="tag-wrap"><div class="tag-left">
+                    <div id="tag-grandchild" class="tag-label typography-body" title="A"><span>A</span></div>
+                  </div></div>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </div>
     </aside>
   </body>
 </html>

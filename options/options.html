@@ -28,6 +28,38 @@
         </label>
       </section>
 
+      <section class="panel" aria-labelledby="template-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="template-heading">入门配色模板</h2>
+            <p class="subtle">按需选择并编辑后再应用；模板不会自动写入，也不会默认覆盖已有同名规则。</p>
+          </div>
+          <label class="template-language">
+            标签语言
+            <select id="template-language">
+              <option value="zh">仅中文</option>
+              <option value="en">仅英文</option>
+              <option value="mixed" selected>中英文混合</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap template-table-wrap">
+          <table class="template-table">
+            <thead><tr><th>使用</th><th>类别</th><th>标签名</th><th>颜色</th></tr></thead>
+            <tbody id="template-rows"></tbody>
+          </table>
+        </div>
+        <label class="toggle template-overwrite">
+          <input id="template-overwrite" type="checkbox">
+          <span>覆盖已有同名规则（默认关闭）</span>
+        </label>
+        <p id="template-summary" class="template-summary"></p>
+        <div class="template-actions">
+          <button id="apply-template" type="button">应用所选模板</button>
+          <button id="undo-template" class="quiet-button" type="button" disabled>撤销本次应用</button>
+        </div>
+      </section>
+
       <section class="panel" aria-labelledby="rule-heading">
         <h2 id="rule-heading">添加颜色规则</h2>
         <p class="subtle">已设置颜色的标签会带动其下属标签同色；完整子标签的颜色规则优先。自动模式也可为未设置颜色的标签生成稳定配色。</p>
@@ -74,6 +106,7 @@
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </main>
     <script src="../src/tag-colors.js"></script>
+    <script src="../src/starter-presets.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

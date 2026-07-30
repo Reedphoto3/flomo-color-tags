@@ -2,12 +2,19 @@
   "use strict";
 
   const colors = globalThis.FlomoColorTags;
+  const presets = globalThis.FlomoStarterPresets;
   const SETTINGS_KEY = "settings";
   const elements = {
     enabled: document.querySelector("#enabled"),
     contentEnabled: document.querySelector("#content-enabled"),
     sidebarEnabled: document.querySelector("#sidebar-enabled"),
     colorMode: document.querySelector("#color-mode"),
+    templateLanguage: document.querySelector("#template-language"),
+    templateRows: document.querySelector("#template-rows"),
+    templateOverwrite: document.querySelector("#template-overwrite"),
+    templateSummary: document.querySelector("#template-summary"),
+    applyTemplate: document.querySelector("#apply-template"),
+    undoTemplate: document.querySelector("#undo-template"),
     ruleForm: document.querySelector("#rule-form"),
     tagName: document.querySelector("#tag-name"),
     paletteName: document.querySelector("#palette-name"),
@@ -22,6 +29,8 @@
   };
 
   let settings = colors.cloneDefaultSettings();
+  let templateRows = presets.createTemplateRows("mixed");
+  let templateUndoSnapshot = null;
 
   function setStatus(message, isError) {
     elements.status.textContent = message;
@@ -76,6 +85,86 @@
     swatch.style.borderColor = appearance.light.border;
     swatch.title = colors.PALETTE[color] ? colors.PALETTE[color].label : color.toUpperCase();
     return swatch;
+  }
+
+  function createPaletteSelect(value) {
+    const select = document.createElement("select");
+    for (const palette of colors.paletteEntries()) {
+      const option = document.createElement("option");
+      option.value = palette.name;
+      option.textContent = palette.label;
+      select.append(option);
+    }
+    select.value = value;
+    return select;
+  }
+
+  function getTemplateAnalysis() {
+    return presets.analyzeTemplateMerge(settings.overrides, templateRows, {
+      colors,
+      overwrite: elements.templateOverwrite.checked
+    });
+  }
+
+  function renderTemplateSummary() {
+    const analysis = getTemplateAnalysis();
+    const parts = [
+      `将新增 ${analysis.added} 条`,
+      `将保留 ${analysis.preserved} 条已有规则`,
+      `有 ${analysis.conflicts} 条同名规则${elements.templateOverwrite.checked ? "将按选择覆盖" : "不会覆盖"}`
+    ];
+    if (analysis.invalid) {
+      parts.push(`无效 ${analysis.invalid} 条`);
+    }
+    if (analysis.duplicates) {
+      parts.push(`重复 ${analysis.duplicates} 条`);
+    }
+    elements.templateSummary.textContent = parts.join("；");
+  }
+
+  function renderTemplateRows() {
+    elements.templateRows.replaceChildren();
+    for (const row of templateRows) {
+      const tableRow = document.createElement("tr");
+
+      const selectedCell = document.createElement("td");
+      const selected = document.createElement("input");
+      selected.type = "checkbox";
+      selected.checked = row.selected;
+      selected.setAttribute("aria-label", `使用${row.category}${row.language === "zh" ? "中文" : "英文"}规则`);
+      selected.addEventListener("change", () => {
+        row.selected = selected.checked;
+        renderTemplateSummary();
+      });
+      selectedCell.append(selected);
+
+      const categoryCell = document.createElement("td");
+      categoryCell.textContent = `${row.category} · ${row.language === "zh" ? "中文" : "EN"}`;
+
+      const tagCell = document.createElement("td");
+      const tagInput = document.createElement("input");
+      tagInput.type = "text";
+      tagInput.value = row.tag;
+      tagInput.setAttribute("aria-label", `${row.category}标签名`);
+      tagInput.addEventListener("input", () => {
+        row.tag = tagInput.value;
+        renderTemplateSummary();
+      });
+      tagCell.append(tagInput);
+
+      const colorCell = document.createElement("td");
+      const colorSelect = createPaletteSelect(row.color);
+      colorSelect.setAttribute("aria-label", `${row.category}颜色`);
+      colorSelect.addEventListener("change", () => {
+        row.color = colorSelect.value;
+        renderTemplateSummary();
+      });
+      colorCell.append(colorSelect);
+
+      tableRow.append(selectedCell, categoryCell, tagCell, colorCell);
+      elements.templateRows.append(tableRow);
+    }
+    renderTemplateSummary();
   }
 
   function makeRow(tag) {
@@ -187,6 +276,39 @@
     await saveSettings(settings.colorMode === "manual" ? "已改为仅给指定标签着色。" : "已改为全部标签自动配色。");
   });
 
+  elements.templateLanguage.addEventListener("change", () => {
+    templateRows = presets.createTemplateRows(elements.templateLanguage.value);
+    renderTemplateRows();
+  });
+
+  elements.templateOverwrite.addEventListener("change", renderTemplateSummary);
+
+  elements.applyTemplate.addEventListener("click", async () => {
+    const analysis = getTemplateAnalysis();
+    if (analysis.invalid) {
+      setStatus("模板中仍有无效标签名或颜色，请先修正。", true);
+      return;
+    }
+    templateUndoSnapshot = structuredClone(settings);
+    settings.overrides = analysis.overrides;
+    elements.undoTemplate.disabled = false;
+    await saveSettings(
+      `模板已应用：新增 ${analysis.added} 条，保留 ${analysis.preserved} 条，覆盖 ${analysis.overwritten} 条。`
+    );
+    renderTemplateSummary();
+  });
+
+  elements.undoTemplate.addEventListener("click", async () => {
+    if (!templateUndoSnapshot) {
+      return;
+    }
+    settings = templateUndoSnapshot;
+    templateUndoSnapshot = null;
+    elements.undoTemplate.disabled = true;
+    await saveSettings("已撤销本次模板应用。");
+    renderTemplateSummary();
+  });
+
   elements.ruleForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const tag = colors.normalizeTag(elements.tagName.value);
@@ -257,5 +379,6 @@
 
   addPaletteOptions(elements.paletteName, "");
   elements.paletteName.value = colors.PALETTE_NAMES[0];
+  renderTemplateRows();
   load().catch((error) => setStatus(`加载设置失败：${error.message}`, true));
 })();

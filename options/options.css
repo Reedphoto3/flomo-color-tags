@@ -25,6 +25,7 @@ h2 { font-size: 17px; margin-bottom: 8px; }
 .toggle { align-items: center; display: flex; gap: 8px; }
 .toggle input { accent-color: #5b5bd6; }
 .color-mode { min-width: 190px; }
+.template-language { min-width: 170px; }
 
 .rule-form { align-items: end; display: grid; gap: 14px; grid-template-columns: minmax(210px, 1fr) minmax(150px, .7fr) minmax(215px, .8fr) auto; margin-top: 16px; }
 label { color: #344054; display: grid; font-size: 14px; font-weight: 600; gap: 7px; }
@@ -54,6 +55,17 @@ td select { min-width: 148px; }
 .remove-rule:hover { background: #fff3f2; }
 .empty { color: #667085; padding: 16px 6px; }
 
+.template-table-wrap { max-height: 430px; }
+.template-table { min-width: 620px; }
+.template-table th:first-child, .template-table td:first-child { text-align: center; width: 54px; }
+.template-table th:last-child, .template-table td:last-child { text-align: left; width: auto; }
+.template-table input[type="text"] { min-width: 180px; width: 100%; }
+.template-table select { min-width: 130px; }
+.template-overwrite { margin-top: 14px; }
+.template-summary { color: #475467; font-size: 14px; margin: 12px 0; }
+.template-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+
 .backup-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .file-button input { display: none; }
 .status { color: #16713d; min-height: 1.5em; padding: 14px 2px 0; }
@@ -66,7 +78,7 @@ td select { min-width: 148px; }
 
 @media (prefers-color-scheme: dark) {
   :root { background: #18181d; color: #f3f4f6; }
-  .subtle, th, .empty { color: #b5bac8; }
+  .subtle, th, .empty, .template-summary { color: #b5bac8; }
   .panel { background: #23232b; border-color: #3a3a48; box-shadow: none; }
   label { color: #e2e5ef; }
   input[type="text"], select { background: #2a2a34; border-color: #505162; color: #f3f4f6; }

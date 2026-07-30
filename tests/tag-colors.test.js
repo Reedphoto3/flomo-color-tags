@@ -6,6 +6,7 @@ const { parseHTML } = require("linkedom");
 const colors = require("../src/tag-colors.js");
 const detection = require("../src/tag-detection.js");
 const rendering = require("../src/tag-rendering.js");
+const presets = require("../src/starter-presets.js");
 
 const FIXTURE_DIRECTORY = path.join(__dirname, "fixtures");
 
@@ -256,4 +257,63 @@ test("原生绿色选中状态的 CSS 优先撤回插件色块", () => {
   assert.match(css, /\[aria-selected="true"\]/);
   assert.match(css, /background-color:\s*transparent\s*!important/);
   assert.match(css, /color:\s*inherit\s*!important/);
+});
+
+test("入门模板支持中文、英文和中英文混合", () => {
+  const zh = presets.createTemplateRows("zh");
+  const en = presets.createTemplateRows("en");
+  const mixed = presets.createTemplateRows("mixed");
+  assert.equal(zh.length, 10);
+  assert.equal(en.length, 10);
+  assert.equal(mixed.length, 20);
+  assert.equal(zh.filter((row) => row.selected).length, 6);
+  assert.equal(en.find((row) => row.id === "work-en").tag, "Work");
+  assert.deepEqual(
+    mixed.filter((row) => row.id.startsWith("work-")).map((row) => row.tag),
+    ["工作", "Work"]
+  );
+});
+
+test("用户可以在应用模板前修改标签名和颜色", () => {
+  const rows = presets.createTemplateRows("en");
+  const work = rows.find((row) => row.id === "work-en");
+  work.tag = "6-Workspace";
+  work.color = "rose";
+  const result = presets.analyzeTemplateMerge({}, rows, { colors });
+  assert.equal(result.overrides["6-Workspace"], "rose");
+  assert.equal(Object.hasOwn(result.overrides, "Work"), false);
+});
+
+test("模板默认不覆盖已有规则，也可由用户主动覆盖", () => {
+  const rows = presets.createTemplateRows("zh");
+  const existing = { "工作": "coral", "自有标签": "teal" };
+  const safe = presets.analyzeTemplateMerge(existing, rows, { colors });
+  assert.equal(safe.overrides["工作"], "coral");
+  assert.equal(safe.overrides["自有标签"], "teal");
+  assert.equal(safe.conflicts, 1);
+  assert.equal(safe.overwritten, 0);
+
+  const overwrite = presets.analyzeTemplateMerge(existing, rows, { colors, overwrite: true });
+  assert.equal(overwrite.overrides["工作"], "indigo");
+  assert.equal(overwrite.overrides["自有标签"], "teal");
+  assert.equal(overwrite.overwritten, 1);
+});
+
+test("模板规则继续支持父标签颜色继承给子标签", () => {
+  const rows = presets.createTemplateRows("zh");
+  const result = presets.analyzeTemplateMerge({}, rows, { colors });
+  assert.equal(
+    colors.resolveTagAppearance("工作/会议", result.overrides, false).paletteName,
+    "indigo"
+  );
+});
+
+test("重复应用模板不会制造重复规则或异常", () => {
+  const rows = presets.createTemplateRows("mixed");
+  const first = presets.analyzeTemplateMerge({}, rows, { colors });
+  const second = presets.analyzeTemplateMerge(first.overrides, rows, { colors });
+  assert.deepEqual(second.overrides, first.overrides);
+  assert.equal(second.added, 0);
+  assert.equal(second.conflicts, 12);
+  assert.equal(second.preserved, 12);
 });

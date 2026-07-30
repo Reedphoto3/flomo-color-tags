@@ -1,6 +1,33 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { parseHTML } = require("linkedom");
 const colors = require("../src/tag-colors.js");
+const detection = require("../src/tag-detection.js");
+const rendering = require("../src/tag-rendering.js");
+
+const FIXTURE_DIRECTORY = path.join(__dirname, "fixtures");
+
+function loadFixture(name) {
+  return parseHTML(fs.readFileSync(path.join(FIXTURE_DIRECTORY, name), "utf8"));
+}
+
+function createTestRenderer(document, overrides = {}, extra = {}) {
+  const settings = {
+    ...colors.cloneDefaultSettings(),
+    overrides,
+    ...extra.settings
+  };
+  return rendering.createRenderer({
+    colors,
+    detection,
+    document,
+    getSettings: () => settings,
+    getComputedStyle: () => ({ colorScheme: extra.colorScheme || "" }),
+    matchMedia: () => ({ matches: Boolean(extra.prefersDark) })
+  });
+}
 
 test("规范化标签会去除 # 和多余空白，但保留数字结尾", () => {
   assert.equal(colors.normalizeTag("  #示例主题 / 子项  "), "示例主题/子项");
@@ -98,4 +125,135 @@ test("旧版设置会迁移为不含个人标签的空白白名单", () => {
 test("当前版本设置会保留浏览器本地的用户自定义规则", () => {
   const settings = colors.sanitizeSettings({ settingsVersion: 9, enabled: true, overrides: { "示例根目录": "jade" } });
   assert.deepEqual(settings.overrides, { "示例根目录": "jade" });
+});
+
+test("DOM fixture 能识别侧栏、嵌套、正文和搜索结果标签", () => {
+  const cases = [
+    ["sidebar-root-tag.html", ["sidebar-work", "sidebar-gpt"]],
+    ["sidebar-nested-tags.html", ["tag-root", "tag-child", "tag-grandchild"]],
+    ["content-tag.html", ["content-tag"]],
+    ["search-result-tag.html", ["search-tag"]]
+  ];
+
+  for (const [fixture, expectedIds] of cases) {
+    const { document } = loadFixture(fixture);
+    const actualIds = detection.getCandidates(document, document)
+      .filter((element) => detection.isLikelyTagElement(element, colors))
+      .map((element) => element.id)
+      .filter(Boolean)
+      .sort();
+    assert.deepEqual(actualIds, expectedIds.sort(), fixture);
+  }
+});
+
+test("标签候选框、普通 tag 字样和多标签父容器不会误染", () => {
+  const pickerDocument = loadFixture("tag-picker.html").document;
+  assert.equal(
+    detection.isLikelyTagElement(pickerDocument.querySelector("#picker-option"), colors),
+    false
+  );
+
+  const contentDocument = loadFixture("content-tag.html").document;
+  assert.equal(
+    detection.isLikelyTagElement(contentDocument.querySelector("#tag-cloud-banner"), colors),
+    false
+  );
+
+  const nestedDocument = loadFixture("sidebar-nested-tags.html").document;
+  assert.equal(
+    detection.isLikelyTagElement(nestedDocument.querySelector("#expanded-group"), colors),
+    false
+  );
+});
+
+test("侧栏 DOM 提取保留数字标签并移除明确数量", () => {
+  const { document } = loadFixture("sidebar-root-tag.html");
+  assert.equal(
+    colors.normalizeTag(detection.getRawTagText(document.querySelector("#sidebar-work"), colors)),
+    "工作"
+  );
+  assert.equal(
+    colors.normalizeTag(detection.getRawTagText(document.querySelector("#sidebar-gpt"), colors)),
+    "GPT 5"
+  );
+});
+
+test("渲染层支持动态添加、标签属性改变和旧样式清理", () => {
+  const { document } = loadFixture("content-tag.html");
+  const renderer = createTestRenderer(document, { "灵感": "violet", "工作": "indigo", "兴趣": "amber" });
+  const tag = document.querySelector("#content-tag");
+  renderer.processRoot(document);
+  assert.equal(tag.dataset.flomoColorTagKey, "灵感");
+
+  tag.setAttribute("data-tag", "工作");
+  renderer.processRoot(tag);
+  assert.equal(tag.dataset.flomoColorTagKey, "工作");
+
+  tag.setAttribute("data-tag", "兴趣");
+  renderer.processRoot(tag);
+  assert.equal(tag.dataset.flomoColorTagKey, "兴趣");
+
+  tag.removeAttribute("data-tag");
+  tag.removeAttribute("href");
+  tag.className = "ordinary-link";
+  tag.textContent = "普通节点";
+  renderer.processRoot(tag);
+  assert.equal(tag.hasAttribute("data-flomo-color-tag"), false);
+
+  const dynamic = document.createElement("a");
+  dynamic.id = "dynamic-tag";
+  dynamic.setAttribute("data-tag-name", "工作");
+  dynamic.setAttribute("href", "/tag/work");
+  dynamic.textContent = "#工作";
+  document.body.append(dynamic);
+  renderer.processRoot(dynamic);
+  assert.equal(dynamic.dataset.flomoColorTagKey, "工作");
+});
+
+test("节点从正文移动到侧栏后会重新计算显示范围", () => {
+  const { document } = loadFixture("content-tag.html");
+  const renderer = createTestRenderer(document, { "灵感": "violet" });
+  const tag = document.querySelector("#content-tag");
+  renderer.processRoot(tag);
+  assert.equal(tag.dataset.flomoColorTagScope, "content");
+
+  const sidebar = document.createElement("aside");
+  sidebar.className = "app-sidebar";
+  document.body.append(sidebar);
+  sidebar.append(tag);
+  renderer.processRoot(tag);
+  assert.equal(tag.dataset.flomoColorTagScope, "sidebar");
+});
+
+test("fixture 中的显式浅色和深色主题优先于系统偏好", () => {
+  const lightDocument = loadFixture("light-theme.html").document;
+  const lightRenderer = createTestRenderer(
+    lightDocument,
+    { "工作": "indigo" },
+    { colorScheme: "dark", prefersDark: true }
+  );
+  lightRenderer.processRoot(lightDocument);
+  assert.equal(lightDocument.querySelector("#light-tag").dataset.flomoColorTagTheme, "light");
+
+  const darkDocument = loadFixture("dark-theme.html").document;
+  const darkRenderer = createTestRenderer(
+    darkDocument,
+    { "工作": "indigo" },
+    { colorScheme: "light", prefersDark: false }
+  );
+  darkRenderer.processRoot(darkDocument);
+  assert.equal(darkDocument.querySelector("#dark-tag").dataset.flomoColorTagTheme, "dark");
+});
+
+test("属性观察覆盖标签复用所需字段", () => {
+  for (const attribute of ["data-tag", "data-tag-name", "data-tag-path", "href"]) {
+    assert.ok(detection.OBSERVED_TAG_ATTRIBUTES.includes(attribute), attribute);
+  }
+});
+
+test("原生绿色选中状态的 CSS 优先撤回插件色块", () => {
+  const css = fs.readFileSync(path.join(__dirname, "../src/content.css"), "utf8");
+  assert.match(css, /\[aria-selected="true"\]/);
+  assert.match(css, /background-color:\s*transparent\s*!important/);
+  assert.match(css, /color:\s*inherit\s*!important/);
 });

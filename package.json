@@ -1,0 +1,11 @@
+{
+  "name": "flomo-color-tags",
+  "version": "0.1.11",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/tag-colors.test.js"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.12"
+  }
+}

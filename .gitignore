@@ -1,6 +1,9 @@
 # macOS Finder metadata
 .DS_Store
 
+# Installed test dependencies.
+node_modules/
+
 # Local release bundles; publish these as reviewed release assets instead of source files.
 *.zip
 *.crx

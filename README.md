@@ -39,5 +39,6 @@
 ## 测试
 
 ```bash
+npm ci
 node --test tests/tag-colors.test.js
 ```

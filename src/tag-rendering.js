@@ -82,6 +82,7 @@
       }
 
       const sidebar = detection.isSidebarTag(source);
+      const pinned = sidebar && detection.isPinnedSidebarTag(source);
       const styleElement = sidebar ? detection.getSidebarStyleTarget(source) : source;
       const previousTarget = sourceTargets.get(source);
       if (previousTarget && previousTarget !== styleElement) {
@@ -99,10 +100,12 @@
 
       const tagValue = colors.normalizeTag(detection.getRawTagText(source, colors));
       const theme = isDarkTheme() ? "dark" : "light";
+      const fallbackToAuto = settings.colorMode === "automatic"
+        || (pinned && settings.pinnedTagsAutoColor === true);
       const appearance = colors.resolveTagAppearance(
         tagValue,
         settings.overrides,
-        settings.colorMode === "automatic"
+        fallbackToAuto
       );
       if (!appearance) {
         clearSourceStyle(source);

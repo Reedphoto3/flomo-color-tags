@@ -69,10 +69,11 @@
   const DEFAULT_SETTINGS = Object.freeze({
     // 配置数据结构版本，与 manifest.json 中的扩展版本无关。
     // 仅在持久化设置结构发生变化时递增。
-    settingsVersion: 9,
+    settingsVersion: 10,
     enabled: true,
     contentEnabled: true,
     sidebarEnabled: true,
+    pinnedTagsAutoColor: false,
     colorMode: "manual",
     overrides: DEFAULT_TAG_COLORS
   });
@@ -83,6 +84,7 @@
       enabled: DEFAULT_SETTINGS.enabled,
       contentEnabled: DEFAULT_SETTINGS.contentEnabled,
       sidebarEnabled: DEFAULT_SETTINGS.sidebarEnabled,
+      pinnedTagsAutoColor: DEFAULT_SETTINGS.pinnedTagsAutoColor,
       colorMode: DEFAULT_SETTINGS.colorMode,
       overrides: { ...DEFAULT_TAG_COLORS }
     };
@@ -315,14 +317,12 @@
 
   function sanitizeSettings(value) {
     const source = value && typeof value === "object" ? value : {};
-    const isLegacySettings = source.settingsVersion !== DEFAULT_SETTINGS.settingsVersion;
+    const sourceVersion = Number.isInteger(source.settingsVersion) ? source.settingsVersion : 0;
     const defaults = cloneDefaultSettings();
-    if (!isLegacySettings) {
-      defaults.overrides = {};
-    }
-    // 旧版本默认会给所有标签自动配色。升级到白名单方案时，不沿用旧的
-    // 覆盖规则，以免历史规则意外让额外标签继续着色。
-    if (!isLegacySettings) {
+
+    // settingsVersion 9 起，颜色规则已经是用户主动维护的白名单，升级时必须保留。
+    // 更早版本的规则来源语义不同，继续沿用既有迁移：不导入历史覆盖项。
+    if (sourceVersion >= 9) {
       const overrides = source.overrides && typeof source.overrides === "object" ? source.overrides : {};
 
       for (const [key, color] of Object.entries(overrides)) {
@@ -339,6 +339,7 @@
       enabled: source.enabled !== false,
       contentEnabled: source.contentEnabled !== false,
       sidebarEnabled: source.sidebarEnabled !== false,
+      pinnedTagsAutoColor: source.pinnedTagsAutoColor === true,
       colorMode: source.colorMode === "automatic" ? "automatic" : "manual",
       overrides: defaults.overrides
     };

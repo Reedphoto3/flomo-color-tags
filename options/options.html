@@ -28,6 +28,38 @@
         </label>
       </section>
 
+      <section class="panel" aria-labelledby="template-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="template-heading">入门配色模板</h2>
+            <p class="subtle">按需选择并编辑后再应用；模板不会自动写入，也不会默认覆盖已有同名规则。</p>
+          </div>
+          <label class="template-language">
+            标签语言
+            <select id="template-language">
+              <option value="zh">仅中文</option>
+              <option value="en">仅英文</option>
+              <option value="mixed" selected>中英文混合</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap template-table-wrap">
+          <table class="template-table">
+            <thead><tr><th>使用</th><th>类别</th><th>标签名</th><th>颜色</th></tr></thead>
+            <tbody id="template-rows"></tbody>
+          </table>
+        </div>
+        <label class="toggle template-overwrite">
+          <input id="template-overwrite" type="checkbox">
+          <span>覆盖已有同名规则（默认关闭）</span>
+        </label>
+        <p id="template-summary" class="template-summary"></p>
+        <div class="template-actions">
+          <button id="apply-template" type="button">应用所选模板</button>
+          <button id="undo-template" class="quiet-button" type="button" disabled>撤销本次应用</button>
+        </div>
+      </section>
+
       <section class="panel" aria-labelledby="rule-heading">
         <h2 id="rule-heading">添加颜色规则</h2>
         <p class="subtle">已设置颜色的标签会带动其下属标签同色；完整子标签的颜色规则优先。自动模式也可为未设置颜色的标签生成稳定配色。</p>
@@ -53,20 +85,53 @@
 
       <section class="panel" aria-labelledby="colored-heading">
         <h2 id="colored-heading">已着色标签</h2>
-        <p class="subtle">这里只显示已设置颜色的标签。修改颜色、移除规则，或在上方输入新标签名即可管理。</p>
+        <p class="subtle">按层级查看显式规则和可推导的继承节点；插件不会额外记录你在 flomo 中出现过的标签。</p>
+        <div class="rule-filters">
+          <label>
+            搜索标签
+            <input id="rule-search" type="search" placeholder="输入标签名称">
+          </label>
+          <label>
+            按颜色
+            <select id="rule-color-filter">
+              <option value="">全部颜色</option>
+            </select>
+          </label>
+          <label class="toggle filter-toggle">
+            <input id="rule-custom-only" type="checkbox">
+            <span>只看自定义颜色</span>
+          </label>
+          <button id="clear-rule-filters" class="quiet-button" type="button">清除筛选</button>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>标签</th><th>颜色</th><th></th></tr></thead>
+            <thead><tr><th>标签与来源</th><th>颜色</th><th></th></tr></thead>
             <tbody id="colored-tags"></tbody>
           </table>
         </div>
       </section>
 
+      <section class="panel" aria-labelledby="batch-heading">
+        <h2 id="batch-heading">批量添加规则</h2>
+        <p class="subtle">每行使用“标签 = 颜色”，先解析预览，再写入设置。</p>
+        <textarea id="batch-rules" rows="6" placeholder="工作 = indigo&#10;个人 = jade&#10;摄影 = #8b5cf6&#10;学习/医学 = sky"></textarea>
+        <label class="toggle batch-overwrite">
+          <input id="batch-overwrite" type="checkbox">
+          <span>覆盖已有同名规则（默认关闭）</span>
+        </label>
+        <div class="batch-actions">
+          <button id="preview-batch" type="button">解析并预览</button>
+          <button id="apply-batch" type="button" disabled>确认添加</button>
+        </div>
+        <div id="batch-preview" class="batch-preview" aria-live="polite"></div>
+      </section>
+
       <section class="panel" aria-labelledby="backup-heading">
         <h2 id="backup-heading">备份与恢复</h2>
+        <p class="subtle">恢复前会统计有效、重复和无效规则，并由你确认后再写入。</p>
         <div class="backup-actions">
-          <button id="export-settings" type="button">导出设置</button>
-          <label class="file-button">导入设置<input id="import-settings" type="file" accept="application/json,.json"></label>
+          <button id="export-settings" type="button">备份配置</button>
+          <label class="file-button">恢复配置<input id="import-settings" type="file" accept="application/json,.json"></label>
           <button id="reset-settings" class="danger-button" type="button">恢复默认设置</button>
         </div>
       </section>
@@ -74,6 +139,8 @@
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </main>
     <script src="../src/tag-colors.js"></script>
+    <script src="../src/starter-presets.js"></script>
+    <script src="../src/settings-tools.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

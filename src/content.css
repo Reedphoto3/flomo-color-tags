@@ -24,11 +24,11 @@
 /* flomo 用绿色背景表示当前选中标签。常见的选中属性或类命中时，撤回色块，
    让原生选中态保持唯一且清晰的语义。 */
 [data-flomo-color-tag="true"][data-flomo-color-tag-scope="sidebar"]:is(
-  [aria-current], [aria-selected="true"], [data-active="true"], [data-selected="true"],
+  [aria-current]:not([aria-current="false"]), [aria-selected="true"], [data-active="true"], [data-selected="true"],
   [data-state="active"], [data-state="selected"], .active, .selected, .current, .is-active, .is-selected, .is-current
 ),
 :is(
-  [aria-current], [aria-selected="true"], [data-active="true"], [data-selected="true"],
+  [aria-current]:not([aria-current="false"]), [aria-selected="true"], [data-active="true"], [data-selected="true"],
   [data-state="active"], [data-state="selected"], .active, .selected, .current, .is-active, .is-selected, .is-current
 ) [data-flomo-color-tag="true"][data-flomo-color-tag-scope="sidebar"] {
   background-color: transparent !important;

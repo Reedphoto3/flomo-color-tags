@@ -67,6 +67,8 @@
   // chrome.storage.local 中，新安装后可在设置页自行添加。
   const DEFAULT_TAG_COLORS = Object.freeze({});
   const DEFAULT_SETTINGS = Object.freeze({
+    // 配置数据结构版本，与 manifest.json 中的扩展版本无关。
+    // 仅在持久化设置结构发生变化时递增。
     settingsVersion: 9,
     enabled: true,
     contentEnabled: true,
@@ -91,17 +93,26 @@
       return "";
     }
 
-    const compact = String(value).replace(/\s+/g, " ").trim();
-    // 侧边栏标签常把 memo 数量拼在同一个元素中，例如“示例主题 1”。
-    // 该数量不是标签名，必须在生成稳定颜色键前移除。
-    const withoutCount = compact
-      .replace(/\s+[（(]\s*\d+\s*[)）]$/, "")
-      .replace(/\s+\d+(?:\s*(?:条|则|个|篇|notes?|memos?))?$/i, "");
-
-    return withoutCount
+    return String(value)
+      .replace(/\s+/g, " ")
+      .trim()
       .replace(/^#+\s*/, "")
       .replace(/\s*\/\s*/g, "/")
       .replace(/^\/+|\/+$/g, "")
+      .trim();
+  }
+
+  function stripSidebarCount(value) {
+    if (typeof value !== "string" && typeof value !== "number") {
+      return "";
+    }
+
+    // 裸数字可能是标签名的一部分（例如 “GPT 5” 或 “计划 2026”）。
+    // 这里只移除侧边栏中具有明确计数语义的后缀。
+    return String(value)
+      .replace(/\s+[（(]\s*\d+\s*[)）]\s*$/, "")
+      .replace(/\s+\d+\s*(?:条|则|个|篇|notes?|memos?)\s*$/i, "")
+      .replace(/\s+/g, " ")
       .trim();
   }
 
@@ -163,24 +174,91 @@
       .join("")}`;
   }
 
+  function linearizeColorChannel(value) {
+    const channel = value / 255;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  }
+
+  function getRelativeLuminance(value) {
+    const color = typeof value === "string" ? hexToRgb(value) : value;
+    return (
+      0.2126 * linearizeColorChannel(color.red) +
+      0.7152 * linearizeColorChannel(color.green) +
+      0.0722 * linearizeColorChannel(color.blue)
+    );
+  }
+
+  function getContrastRatio(first, second) {
+    const light = Math.max(getRelativeLuminance(first), getRelativeLuminance(second));
+    const dark = Math.min(getRelativeLuminance(first), getRelativeLuminance(second));
+    return (light + 0.05) / (dark + 0.05);
+  }
+
+  function ensureReadableText(text, background, minimumRatio = 4.5) {
+    if (getContrastRatio(text, background) >= minimumRatio) {
+      return rgbToHex(typeof text === "string" ? hexToRgb(text) : text);
+    }
+
+    const current = typeof text === "string" ? hexToRgb(text) : text;
+    const black = { red: 0, green: 0, blue: 0 };
+    const white = { red: 255, green: 255, blue: 255 };
+    const target = getContrastRatio(black, background) >= getContrastRatio(white, background)
+      ? black
+      : white;
+
+    for (let ratio = 0.05; ratio <= 1; ratio += 0.05) {
+      const candidate = mixRgb(current, target, ratio);
+      if (getContrastRatio(candidate, background) >= minimumRatio) {
+        return rgbToHex(candidate);
+      }
+    }
+
+    return rgbToHex(target);
+  }
+
   function getCustomAppearance(hex) {
     const base = hexToRgb(hex);
     const white = { red: 255, green: 255, blue: 255 };
     const black = { red: 0, green: 0, blue: 0 };
 
+    const lightBackground = rgbToHex(mixRgb(base, white, 0.86));
+    const darkBackground = rgbToHex(mixRgb(base, black, 0.76));
+    const lightText = rgbToHex(mixRgb(base, black, 0.34));
+    const darkText = rgbToHex(mixRgb(base, white, 0.57));
+
     return {
       paletteName: "custom",
       light: {
-        background: rgbToHex(mixRgb(base, white, 0.86)),
-        text: rgbToHex(mixRgb(base, black, 0.34)),
+        background: lightBackground,
+        text: ensureReadableText(lightText, lightBackground),
         border: rgbToHex(mixRgb(base, white, 0.47))
       },
       dark: {
-        background: rgbToHex(mixRgb(base, black, 0.76)),
-        text: rgbToHex(mixRgb(base, white, 0.57)),
+        background: darkBackground,
+        text: ensureReadableText(darkText, darkBackground),
         border: rgbToHex(mixRgb(base, black, 0.25))
       }
     };
+  }
+
+  function resolveDarkTheme(explicitTheme, colorScheme, prefersDark) {
+    const explicit = String(explicitTheme || "").toLowerCase();
+    const hasExplicitDark = /(^|[\s"'=:;,_-])dark($|[\s"'=:;,_-])/.test(explicit);
+    const hasExplicitLight = /(^|[\s"'=:;,_-])light($|[\s"'=:;,_-])/.test(explicit);
+    if (hasExplicitDark) {
+      return true;
+    }
+    if (hasExplicitLight) {
+      return false;
+    }
+
+    const schemes = String(colorScheme || "").toLowerCase().match(/\b(?:dark|light)\b/g) || [];
+    if (schemes.length === 1) {
+      return schemes[0] === "dark";
+    }
+    return Boolean(prefersDark);
   }
 
   function getOverride(value, overrides, includeRoot = true) {
@@ -213,10 +291,9 @@
   }
 
   function resolveTagAppearance(value, overrides, fallbackToAuto = true) {
-    // 白名单模式中，已指定颜色的父标签会将同一颜色延伸给下属标签；
-    // 完整子标签规则优先。自动模式仍按一级标签计算稳定颜色。
-    const override = getOverride(value, overrides, fallbackToAuto)
-      || (!fallbackToAuto ? getDescendantOverride(value, overrides) : null);
+    // 两种模式都优先使用完整标签或最近的显式父标签规则。
+    // 只有自动模式在完全找不到显式规则时才生成稳定颜色。
+    const override = getDescendantOverride(value, overrides);
     const requested = typeof override === "string" ? override.trim().toLowerCase() : "";
 
     if (isHexColor(requested)) {
@@ -278,10 +355,15 @@
     PALETTE_NAMES,
     cloneDefaultSettings,
     normalizeTag,
+    stripSidebarCount,
     getTagKeys,
     hashString,
     getAutoPaletteName,
     isHexColor,
+    getRelativeLuminance,
+    getContrastRatio,
+    ensureReadableText,
+    resolveDarkTheme,
     getDescendantOverride,
     resolveTagAppearance,
     sanitizeSettings,

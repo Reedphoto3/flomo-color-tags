@@ -2,12 +2,20 @@
   "use strict";
 
   const colors = globalThis.FlomoColorTags;
+  const presets = globalThis.FlomoStarterPresets;
+  const settingsTools = globalThis.FlomoSettingsTools;
   const SETTINGS_KEY = "settings";
   const elements = {
     enabled: document.querySelector("#enabled"),
     contentEnabled: document.querySelector("#content-enabled"),
     sidebarEnabled: document.querySelector("#sidebar-enabled"),
     colorMode: document.querySelector("#color-mode"),
+    templateLanguage: document.querySelector("#template-language"),
+    templateRows: document.querySelector("#template-rows"),
+    templateOverwrite: document.querySelector("#template-overwrite"),
+    templateSummary: document.querySelector("#template-summary"),
+    applyTemplate: document.querySelector("#apply-template"),
+    undoTemplate: document.querySelector("#undo-template"),
     ruleForm: document.querySelector("#rule-form"),
     tagName: document.querySelector("#tag-name"),
     paletteName: document.querySelector("#palette-name"),
@@ -15,6 +23,15 @@
     customColor: document.querySelector("#custom-color"),
     customColorCode: document.querySelector("#custom-color-code"),
     coloredTags: document.querySelector("#colored-tags"),
+    ruleSearch: document.querySelector("#rule-search"),
+    ruleColorFilter: document.querySelector("#rule-color-filter"),
+    ruleCustomOnly: document.querySelector("#rule-custom-only"),
+    clearRuleFilters: document.querySelector("#clear-rule-filters"),
+    batchRules: document.querySelector("#batch-rules"),
+    batchOverwrite: document.querySelector("#batch-overwrite"),
+    previewBatch: document.querySelector("#preview-batch"),
+    applyBatch: document.querySelector("#apply-batch"),
+    batchPreview: document.querySelector("#batch-preview"),
     exportSettings: document.querySelector("#export-settings"),
     importSettings: document.querySelector("#import-settings"),
     resetSettings: document.querySelector("#reset-settings"),
@@ -22,10 +39,18 @@
   };
 
   let settings = colors.cloneDefaultSettings();
+  let templateRows = presets.createTemplateRows("mixed");
+  let templateUndoChanges = null;
+  let batchAnalysis = null;
 
   function setStatus(message, isError) {
     elements.status.textContent = message;
     elements.status.style.color = isError ? "#b42318" : "";
+  }
+
+  function clearTemplateUndo() {
+    templateUndoChanges = null;
+    elements.undoTemplate.disabled = true;
   }
 
   function addPaletteOptions(select, customColor) {
@@ -78,15 +103,126 @@
     return swatch;
   }
 
-  function makeRow(tag) {
+  function createPaletteSelect(value) {
+    const select = document.createElement("select");
+    for (const palette of colors.paletteEntries()) {
+      const option = document.createElement("option");
+      option.value = palette.name;
+      option.textContent = palette.label;
+      select.append(option);
+    }
+    select.value = value;
+    return select;
+  }
+
+  function getTemplateAnalysis() {
+    return presets.analyzeTemplateMerge(settings.overrides, templateRows, {
+      colors,
+      overwrite: elements.templateOverwrite.checked
+    });
+  }
+
+  function renderTemplateSummary() {
+    const analysis = getTemplateAnalysis();
+    const parts = [
+      `将新增 ${analysis.added} 条`,
+      `将保留 ${analysis.preserved} 条已有规则`,
+      `有 ${analysis.conflicts} 条同名规则${elements.templateOverwrite.checked ? "将按选择覆盖" : "不会覆盖"}`
+    ];
+    if (analysis.invalid) {
+      parts.push(`无效 ${analysis.invalid} 条`);
+    }
+    if (analysis.duplicates) {
+      parts.push(`重复 ${analysis.duplicates} 条`);
+    }
+    elements.templateSummary.textContent = parts.join("；");
+  }
+
+  function renderTemplateRows() {
+    elements.templateRows.replaceChildren();
+    for (const row of templateRows) {
+      const tableRow = document.createElement("tr");
+
+      const selectedCell = document.createElement("td");
+      const selected = document.createElement("input");
+      selected.type = "checkbox";
+      selected.checked = row.selected;
+      selected.setAttribute("aria-label", `使用${row.category}${row.language === "zh" ? "中文" : "英文"}规则`);
+      selected.addEventListener("change", () => {
+        row.selected = selected.checked;
+        renderTemplateSummary();
+      });
+      selectedCell.append(selected);
+
+      const categoryCell = document.createElement("td");
+      categoryCell.textContent = `${row.category} · ${row.language === "zh" ? "中文" : "EN"}`;
+
+      const tagCell = document.createElement("td");
+      const tagInput = document.createElement("input");
+      tagInput.type = "text";
+      tagInput.value = row.tag;
+      tagInput.setAttribute("aria-label", `${row.category}标签名`);
+      tagInput.addEventListener("input", () => {
+        row.tag = tagInput.value;
+        renderTemplateSummary();
+      });
+      tagCell.append(tagInput);
+
+      const colorCell = document.createElement("td");
+      const colorSelect = createPaletteSelect(row.color);
+      colorSelect.setAttribute("aria-label", `${row.category}颜色`);
+      colorSelect.addEventListener("change", () => {
+        row.color = colorSelect.value;
+        renderTemplateSummary();
+      });
+      colorCell.append(colorSelect);
+
+      tableRow.append(selectedCell, categoryCell, tagCell, colorCell);
+      elements.templateRows.append(tableRow);
+    }
+    renderTemplateSummary();
+  }
+
+  function makeRow(rule) {
+    const { tag } = rule;
     const row = document.createElement("tr");
+    if (!rule.explicit) {
+      row.className = "inherited-rule";
+    }
     const tagCell = document.createElement("td");
-    tagCell.textContent = `#${tag}`;
+    const tagLabel = document.createElement("span");
+    tagLabel.className = "rule-tag-label";
+    tagLabel.style.setProperty("--rule-depth", rule.depth);
+    tagLabel.textContent = `#${tag}`;
+    const source = document.createElement("small");
+    source.className = "rule-source";
+    source.textContent = rule.explicit
+      ? "单独设置"
+      : rule.sourceTag
+        ? `继承自 #${rule.sourceTag}`
+        : "仅作为层级分组";
+    tagCell.append(tagLabel, source);
 
     const colorCell = document.createElement("td");
     colorCell.className = "color-cell";
-    const override = settings.overrides[tag];
+    const override = rule.color;
+    if (!override) {
+      colorCell.textContent = "—";
+      const actionCell = document.createElement("td");
+      row.append(tagCell, colorCell, actionCell);
+      return row;
+    }
     colorCell.append(createColorSwatch(tag, override));
+    if (!rule.explicit) {
+      const inheritedColor = document.createElement("span");
+      inheritedColor.textContent = colors.PALETTE[override]
+        ? colors.PALETTE[override].label
+        : override.toUpperCase();
+      colorCell.append(inheritedColor);
+      const actionCell = document.createElement("td");
+      row.append(tagCell, colorCell, actionCell);
+      return row;
+    }
     const select = document.createElement("select");
     addPaletteOptions(select, colors.isHexColor(override) ? override : "");
     select.value = override;
@@ -122,22 +258,54 @@
 
   function renderColoredTags() {
     elements.coloredTags.replaceChildren();
-    const visibleTags = Object.keys(settings.overrides)
-      .sort((left, right) => left.localeCompare(right, "zh-Hans-CN"));
-    if (visibleTags.length === 0) {
+    const rows = settingsTools.buildRuleHierarchy(settings.overrides);
+    const visibleRows = settingsTools.filterRuleRows(rows, {
+      query: elements.ruleSearch.value,
+      color: elements.ruleColorFilter.value,
+      customOnly: elements.ruleCustomOnly.checked
+    }, colors);
+    if (visibleRows.length === 0) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
       cell.colSpan = 3;
       cell.className = "empty";
-      cell.textContent = "暂时没有已着色标签。请在上方输入标签名并保存颜色。";
+      cell.textContent = rows.length
+        ? "没有符合当前筛选条件的规则。"
+        : "暂时没有已着色标签。请在上方输入标签名并保存颜色。";
       row.append(cell);
       elements.coloredTags.append(row);
       return;
     }
 
-    for (const tag of visibleTags) {
-      elements.coloredTags.append(makeRow(tag));
+    for (const rule of visibleRows) {
+      elements.coloredTags.append(makeRow(rule));
     }
+  }
+
+  function renderBatchPreview() {
+    elements.batchPreview.replaceChildren();
+    if (!batchAnalysis) {
+      return;
+    }
+    const summary = document.createElement("p");
+    summary.textContent = [
+      `有效规则：${batchAnalysis.valid}`,
+      `同名冲突：${batchAnalysis.conflicts}`,
+      `重复规则：${batchAnalysis.duplicates}`,
+      `无效规则：${batchAnalysis.invalid}`
+    ].join("；");
+    elements.batchPreview.append(summary);
+
+    if (batchAnalysis.errors.length) {
+      const list = document.createElement("ul");
+      for (const error of batchAnalysis.errors) {
+        const item = document.createElement("li");
+        item.textContent = `第 ${error.line} 行：${error.reason}（${error.text}）`;
+        list.append(item);
+      }
+      elements.batchPreview.append(list);
+    }
+    elements.applyBatch.disabled = batchAnalysis.valid === 0 || batchAnalysis.invalid > 0;
   }
 
   async function saveSettings(message) {
@@ -145,6 +313,7 @@
     await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
     updateInputs();
     renderColoredTags();
+    renderTemplateSummary();
     setStatus(message || "设置已保存。");
   }
 
@@ -153,6 +322,7 @@
     settings = colors.sanitizeSettings(stored[SETTINGS_KEY]);
     updateInputs();
     renderColoredTags();
+    renderTemplateSummary();
   }
 
   elements.paletteName.addEventListener("change", () => {
@@ -187,6 +357,95 @@
     await saveSettings(settings.colorMode === "manual" ? "已改为仅给指定标签着色。" : "已改为全部标签自动配色。");
   });
 
+  elements.templateLanguage.addEventListener("change", () => {
+    templateRows = presets.createTemplateRows(elements.templateLanguage.value);
+    renderTemplateRows();
+  });
+
+  elements.templateOverwrite.addEventListener("change", renderTemplateSummary);
+
+  elements.applyTemplate.addEventListener("click", async () => {
+    const analysis = getTemplateAnalysis();
+    if (analysis.invalid) {
+      setStatus("模板中仍有无效标签名或颜色，请先修正。", true);
+      return;
+    }
+    templateUndoChanges = presets.createTemplateUndo(
+      settings.overrides,
+      analysis.overrides
+    );
+    settings.overrides = analysis.overrides;
+    elements.undoTemplate.disabled = templateUndoChanges.length === 0;
+    await saveSettings(
+      `模板已应用：新增 ${analysis.added} 条，保留 ${analysis.preserved} 条，覆盖 ${analysis.overwritten} 条。`
+    );
+  });
+
+  elements.undoTemplate.addEventListener("click", async () => {
+    if (!templateUndoChanges) {
+      return;
+    }
+    const result = presets.applyTemplateUndo(settings.overrides, templateUndoChanges);
+    settings.overrides = result.overrides;
+    clearTemplateUndo();
+    await saveSettings(
+      `已撤销模板影响的 ${result.reverted} 条规则；保留模板应用后的 ${result.preserved} 条同名修改。`
+    );
+  });
+
+  for (const control of [elements.ruleSearch, elements.ruleColorFilter, elements.ruleCustomOnly]) {
+    control.addEventListener("input", renderColoredTags);
+    control.addEventListener("change", renderColoredTags);
+  }
+
+  elements.clearRuleFilters.addEventListener("click", () => {
+    elements.ruleSearch.value = "";
+    elements.ruleColorFilter.value = "";
+    elements.ruleCustomOnly.checked = false;
+    renderColoredTags();
+  });
+
+  elements.batchRules.addEventListener("input", () => {
+    batchAnalysis = null;
+    elements.applyBatch.disabled = true;
+    elements.batchPreview.replaceChildren();
+  });
+
+  elements.previewBatch.addEventListener("click", () => {
+    batchAnalysis = settingsTools.parseBatchRules(
+      elements.batchRules.value,
+      settings.overrides,
+      colors
+    );
+    renderBatchPreview();
+  });
+
+  elements.applyBatch.addEventListener("click", async () => {
+    // 点击确认时重新解析，避免预览后新增的同名规则绕过“不覆盖”保护。
+    batchAnalysis = settingsTools.parseBatchRules(
+      elements.batchRules.value,
+      settings.overrides,
+      colors
+    );
+    renderBatchPreview();
+    if (!batchAnalysis || batchAnalysis.invalid) {
+      return;
+    }
+    const result = settingsTools.applyBatchRules(
+      settings.overrides,
+      batchAnalysis,
+      elements.batchOverwrite.checked
+    );
+    settings.overrides = result.overrides;
+    await saveSettings(
+      `批量规则已添加：新增 ${result.added} 条，保留 ${result.preserved} 条，覆盖 ${result.overwritten} 条。`
+    );
+    batchAnalysis = null;
+    elements.batchRules.value = "";
+    elements.applyBatch.disabled = true;
+    elements.batchPreview.replaceChildren();
+  });
+
   elements.ruleForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const tag = colors.normalizeTag(elements.tagName.value);
@@ -211,15 +470,21 @@
   });
 
   elements.exportSettings.addEventListener("click", () => {
-    const payload = JSON.stringify({ version: 1, settings }, null, 2);
+    const now = new Date();
+    const extensionVersion = chrome.runtime.getManifest().version;
+    const payload = JSON.stringify(
+      settingsTools.createBackup(settings, extensionVersion, now),
+      null,
+      2
+    );
     const file = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(file);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "flomo-color-tags-settings.json";
+    link.download = settingsTools.createBackupFilename(now);
     link.click();
     globalThis.setTimeout(() => URL.revokeObjectURL(url), 0);
-    setStatus("设置已导出。");
+    setStatus("配置备份已下载。");
   });
 
   elements.importSettings.addEventListener("change", async () => {
@@ -229,8 +494,20 @@
     }
     try {
       const parsed = JSON.parse(await file.text());
-      settings = colors.sanitizeSettings(parsed.settings || parsed);
-      await saveSettings("设置已导入。");
+      const restored = settingsTools.parseBackupPayload(parsed, colors);
+      const { validRules, duplicateRules, invalidRules } = restored.stats;
+      const confirmed = globalThis.confirm(
+        `恢复配置预览：\n有效规则：${validRules}\n重复规则：${duplicateRules}\n无效规则：${invalidRules}\n\n确认用该配置替换当前设置？`
+      );
+      if (!confirmed) {
+        setStatus("已取消恢复，当前设置没有变化。");
+        return;
+      }
+      clearTemplateUndo();
+      settings = restored.settings;
+      await saveSettings(
+        `配置已恢复：有效 ${validRules} 条，重复 ${duplicateRules} 条，无效 ${invalidRules} 条。`
+      );
     } catch (error) {
       setStatus(`无法导入设置：${error.message}`, true);
     } finally {
@@ -242,6 +519,7 @@
     if (!globalThis.confirm("恢复默认显示和白名单配色？现有自定义颜色规则会被删除。")) {
       return;
     }
+    clearTemplateUndo();
     settings = colors.cloneDefaultSettings();
     await saveSettings("已恢复默认设置。");
   });
@@ -257,5 +535,12 @@
 
   addPaletteOptions(elements.paletteName, "");
   elements.paletteName.value = colors.PALETTE_NAMES[0];
+  for (const palette of colors.paletteEntries()) {
+    const option = document.createElement("option");
+    option.value = palette.name;
+    option.textContent = palette.label;
+    elements.ruleColorFilter.append(option);
+  }
+  renderTemplateRows();
   load().catch((error) => setStatus(`加载设置失败：${error.message}`, true));
 })();

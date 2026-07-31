@@ -19,12 +19,22 @@
     "[class*='_tag']",
     "a[href*='tag']"
   ].join(",");
+  const PINNED_CONTAINER_SELECTOR = [
+    "[data-pinned='true']",
+    "[data-is-pinned='true']",
+    "[class~='pinned_tags']",
+    "[class~='pinned-tags']",
+    "[class~='pinned_tag']",
+    "[class~='pinned-tag']"
+  ].join(",");
   const APPLIED_SELECTOR = "[data-flomo-color-tag='true']";
   const OBSERVED_TAG_ATTRIBUTES = Object.freeze([
     "tag",
     "data-tag",
     "data-tag-name",
     "data-tag-path",
+    "data-pinned",
+    "data-is-pinned",
     "href",
     "class",
     "id",
@@ -79,6 +89,12 @@
   function isSidebarTag(element) {
     return Boolean(
       element.closest("[id*='sidebar' i], [class*='sidebar' i], [id*='nav' i], [class*='nav' i]")
+    );
+  }
+
+  function isPinnedSidebarTag(element) {
+    return Boolean(
+      isSidebarTag(element) && element.closest(PINNED_CONTAINER_SELECTOR)
     );
   }
 
@@ -291,6 +307,7 @@
 
   return Object.freeze({
     TAG_SELECTOR,
+    PINNED_CONTAINER_SELECTOR,
     APPLIED_SELECTOR,
     OBSERVED_TAG_ATTRIBUTES,
     getDirectText,
@@ -302,6 +319,7 @@
     getSidebarStyleTarget,
     isLikelyTagElement,
     isSidebarTag,
+    isPinnedSidebarTag,
     getCandidates
   });
 });

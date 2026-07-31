@@ -14,7 +14,8 @@ flomo-color-tags-settings*.json
 # Local source screenshots may contain real tags or note content.
 flomotag.jpg
 
-# Internal development notes; keep them locally but do not publish them.
+# Internal development notes and agent instructions; keep them locally.
+AGENTS.md
 VALIDATION.md
 IMPLEMENTATION_PLAN.md
 PRIVACY_AUDIT.md

@@ -14,6 +14,22 @@
         <p class="subtle">所有设置都只保存在当前浏览器；扩展不会上传或保存笔记正文。</p>
       </header>
 
+      <details class="panel quick-start" open>
+        <summary>快速开始</summary>
+        <div class="quick-start-content">
+          <p class="subtle">可以从模板开始，也可以只为侧栏固定标签启用稳定随机配色。两种方式都不会覆盖已有同名规则。</p>
+          <ol>
+            <li>使用入门模板，快速建立常用标签颜色。</li>
+            <li>开启固定标签配色，让未单独设置的置顶标签自动分配颜色。</li>
+            <li>完成后备份配置，换浏览器或换电脑时可直接恢复。</li>
+          </ol>
+          <div class="quick-start-actions">
+            <button id="quick-template" type="button">查看入门模板</button>
+            <button id="quick-pinned" class="quiet-button" type="button">启用固定标签配色</button>
+          </div>
+        </div>
+      </details>
+
       <section class="panel settings-panel" aria-labelledby="visibility-heading">
         <h2 id="visibility-heading">启用范围</h2>
         <label class="toggle"><input id="enabled" type="checkbox"> <span>启用彩色标签</span></label>
@@ -28,7 +44,18 @@
         </label>
       </section>
 
-      <section class="panel" aria-labelledby="template-heading">
+      <section id="pinned-coloring-panel" class="panel" aria-labelledby="pinned-coloring-heading">
+        <h2 id="pinned-coloring-heading">固定标签配色</h2>
+        <label class="toggle setting-toggle">
+          <input id="pinned-tags-auto-color" type="checkbox">
+          <span>
+            <strong>为侧栏固定／置顶标签自动随机配色</strong>
+            <small>默认关闭。仅对没有显式颜色规则的固定标签生效；同一标签的颜色稳定，不会每次刷新变化。</small>
+          </span>
+        </label>
+      </section>
+
+      <section id="template-panel" class="panel" aria-labelledby="template-heading">
         <div class="section-heading">
           <div>
             <h2 id="template-heading">入门配色模板</h2>

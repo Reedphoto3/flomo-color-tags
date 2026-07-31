@@ -121,23 +121,34 @@ test("主题判断优先尊重页面显式 dark 和 light", () => {
 test("设置清洗会移除无效规则并保留合法规则", () => {
   const settings = colors.sanitizeSettings({
     enabled: false,
-    settingsVersion: 9,
+    settingsVersion: 10,
+    pinnedTagsAutoColor: true,
     colorMode: "manual",
     overrides: { "#示例根目录": "jade", "无效示例": "rainbow", "示例灵感": "#ff00aa" }
   });
+  assert.equal(settings.settingsVersion, 10);
   assert.equal(settings.enabled, false);
+  assert.equal(settings.pinnedTagsAutoColor, true);
   assert.equal(settings.colorMode, "manual");
   assert.deepEqual(settings.overrides, { "示例根目录": "jade", "示例灵感": "#ff00aa" });
 });
 
 test("旧版设置会迁移为不含个人标签的空白白名单", () => {
   const settings = colors.sanitizeSettings({ settingsVersion: 8, enabled: true, overrides: { "示例项目": "jade", "示例摘录": "sky", "示例主题": "violet" } });
+  assert.equal(settings.settingsVersion, 10);
   assert.equal(settings.colorMode, "manual");
+  assert.equal(settings.pinnedTagsAutoColor, false);
   assert.deepEqual(settings.overrides, {});
 });
 
-test("当前版本设置会保留浏览器本地的用户自定义规则", () => {
-  const settings = colors.sanitizeSettings({ settingsVersion: 9, enabled: true, overrides: { "示例根目录": "jade" } });
+test("settingsVersion 9 升级到 10 会保留用户规则并补充新默认值", () => {
+  const settings = colors.sanitizeSettings({
+    settingsVersion: 9,
+    enabled: true,
+    overrides: { "示例根目录": "jade" }
+  });
+  assert.equal(settings.settingsVersion, 10);
+  assert.equal(settings.pinnedTagsAutoColor, false);
   assert.deepEqual(settings.overrides, { "示例根目录": "jade" });
 });
 
@@ -198,6 +209,17 @@ test("侧栏 DOM 提取保留数字标签并移除明确数量", () => {
   );
 });
 
+test("固定标签检测只命中置顶区域", () => {
+  const pinnedDocument = loadFixture("sidebar-root-tag.html").document;
+  assert.equal(detection.isPinnedSidebarTag(pinnedDocument.querySelector("#sidebar-work")), true);
+
+  const nestedDocument = loadFixture("sidebar-nested-tags.html").document;
+  assert.equal(detection.isPinnedSidebarTag(nestedDocument.querySelector("#tag-root")), false);
+
+  const contentDocument = loadFixture("content-tag.html").document;
+  assert.equal(detection.isPinnedSidebarTag(contentDocument.querySelector("#content-tag")), false);
+});
+
 test("渲染层支持动态添加、标签属性改变和旧样式清理", () => {
   const { document } = loadFixture("content-tag.html");
   const renderer = createTestRenderer(document, { "灵感": "violet", "工作": "indigo", "兴趣": "amber" });
@@ -245,6 +267,36 @@ test("节点从正文移动到侧栏后会重新计算显示范围", () => {
   assert.equal(tag.dataset.flomoColorTagScope, "sidebar");
 });
 
+test("固定标签随机配色默认关闭，开启后稳定着色且显式规则优先", () => {
+  const disabledDocument = loadFixture("sidebar-root-tag.html").document;
+  const disabledTag = disabledDocument.querySelector("#sidebar-work");
+  createTestRenderer(disabledDocument).processRoot(disabledDocument);
+  assert.equal(disabledTag.hasAttribute("data-flomo-color-tag"), false);
+
+  const enabledDocument = loadFixture("sidebar-root-tag.html").document;
+  const enabledTag = enabledDocument.querySelector("#sidebar-work");
+  createTestRenderer(enabledDocument, {}, {
+    settings: { colorMode: "manual", pinnedTagsAutoColor: true }
+  }).processRoot(enabledDocument);
+  assert.equal(enabledTag.dataset.flomoColorTagKey, "工作");
+  const firstAppearance = enabledTag.dataset.flomoColorTagAppearance;
+  assert.ok(firstAppearance);
+
+  const repeatedDocument = loadFixture("sidebar-root-tag.html").document;
+  const repeatedTag = repeatedDocument.querySelector("#sidebar-work");
+  createTestRenderer(repeatedDocument, {}, {
+    settings: { colorMode: "manual", pinnedTagsAutoColor: true }
+  }).processRoot(repeatedDocument);
+  assert.equal(repeatedTag.dataset.flomoColorTagAppearance, firstAppearance);
+
+  const explicitDocument = loadFixture("sidebar-root-tag.html").document;
+  const explicitTag = explicitDocument.querySelector("#sidebar-work");
+  createTestRenderer(explicitDocument, { "工作": "rose" }, {
+    settings: { colorMode: "manual", pinnedTagsAutoColor: true }
+  }).processRoot(explicitDocument);
+  assert.match(explicitTag.dataset.flomoColorTagAppearance, /^rose\|/);
+});
+
 test("fixture 中的显式浅色和深色主题优先于系统偏好", () => {
   const lightDocument = loadFixture("light-theme.html").document;
   const lightRenderer = createTestRenderer(
@@ -280,8 +332,8 @@ test("style 中同时出现 light 和 dark 字样不会被当作显式深色主�
   assert.equal(document.querySelector("#content-tag").dataset.flomoColorTagTheme, "light");
 });
 
-test("属性观察覆盖标签复用所需字段", () => {
-  for (const attribute of ["tag", "data-tag", "data-tag-name", "data-tag-path", "href"]) {
+test("属性观察覆盖标签复用和固定状态所需字段", () => {
+  for (const attribute of ["tag", "data-tag", "data-tag-name", "data-tag-path", "data-pinned", "data-is-pinned", "href"]) {
     assert.ok(detection.OBSERVED_TAG_ATTRIBUTES.includes(attribute), attribute);
   }
 });
@@ -462,11 +514,11 @@ test("新备份包含元数据、版本和日期文件名", () => {
   const date = new Date("2026-07-30T06:00:00.000Z");
   const settings = colors.cloneDefaultSettings();
   settings.overrides = { "工作": "indigo" };
-  const backup = settingsTools.createBackup(settings, "0.2.1", date);
+  const backup = settingsTools.createBackup(settings, "0.3.0", date);
   assert.deepEqual(backup, {
     format: "flomo-color-tags-backup",
     formatVersion: 1,
-    extensionVersion: "0.2.1",
+    extensionVersion: "0.3.0",
     exportedAt: "2026-07-30T06:00:00.000Z",
     settings
   });
@@ -491,27 +543,29 @@ test("恢复配置兼容旧 JSON 和新备份，并统计问题规则", () => {
   assert.equal(legacy.format, "legacy-wrapper");
   assert.deepEqual(legacy.stats, { validRules: 2, duplicateRules: 1, invalidRules: 1 });
   assert.equal(legacy.settings.enabled, false);
+  assert.equal(legacy.settings.settingsVersion, 10);
+  assert.equal(legacy.settings.pinnedTagsAutoColor, false);
   assert.deepEqual(legacy.settings.overrides, { "工作": "indigo", "个人": "jade" });
 
   const modern = settingsTools.parseBackupPayload(
-    settingsTools.createBackup(sourceSettings, "0.2.1", new Date("2026-07-30T06:00:00.000Z")),
+    settingsTools.createBackup(sourceSettings, "0.3.0", new Date("2026-07-30T06:00:00.000Z")),
     colors
   );
   assert.equal(modern.format, "backup");
   assert.deepEqual(modern.stats, legacy.stats);
-  assert.equal(modern.settings.settingsVersion, 9);
+  assert.equal(modern.settings.settingsVersion, 10);
 
   const older = settingsTools.parseBackupPayload({
     settingsVersion: 8,
     overrides: { "旧版规则": "teal" }
   }, colors);
-  assert.equal(older.settings.settingsVersion, 9);
+  assert.equal(older.settings.settingsVersion, 10);
   assert.deepEqual(older.settings.overrides, { "旧版规则": "teal" });
 
   const versionless = settingsTools.parseBackupPayload({
     overrides: { "无版本规则": "amber" }
   }, colors);
-  assert.equal(versionless.settings.settingsVersion, 9);
+  assert.equal(versionless.settings.settingsVersion, 10);
   assert.deepEqual(versionless.settings.overrides, { "无版本规则": "amber" });
 });
 
@@ -521,22 +575,24 @@ test("损坏或不受支持的备份会明确拒绝", () => {
     /不支持/
   );
   assert.throws(
-    () => settingsTools.parseBackupPayload({ settingsVersion: 9 }, colors),
+    () => settingsTools.parseBackupPayload({ settingsVersion: 10 }, colors),
     /缺少颜色规则/
   );
   assert.throws(
-    () => settingsTools.parseBackupPayload({ settingsVersion: 10, overrides: {} }, colors),
-    /高于当前支持的 9/
+    () => settingsTools.parseBackupPayload({ settingsVersion: 11, overrides: {} }, colors),
+    /高于当前支持的 10/
   );
   assert.throws(
-    () => settingsTools.parseBackupPayload({ settingsVersion: "10", overrides: {} }, colors),
+    () => settingsTools.parseBackupPayload({ settingsVersion: "11", overrides: {} }, colors),
     /设置版本无效/
   );
 });
 
-test("设置页能完整加载并执行模板、筛选和批量预览", async () => {
+test("设置页能完整加载并执行快速开始、模板、筛选和批量预览", async () => {
   const html = fs.readFileSync(path.join(__dirname, "../options/options.html"), "utf8");
   const { document, window } = parseHTML(html);
+  window.HTMLElement.prototype.scrollIntoView = () => {};
+  window.HTMLElement.prototype.focus = () => {};
   Object.defineProperty(window.HTMLSelectElement.prototype, "value", {
     configurable: true,
     get() {
@@ -559,7 +615,7 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   };
   const chrome = {
     runtime: {
-      getManifest: () => ({ version: "0.2.1" })
+      getManifest: () => ({ version: "0.3.0" })
     },
     storage: {
       local: {
@@ -599,6 +655,13 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   }
   await new Promise((resolve) => setImmediate(resolve));
 
+  assert.ok(document.querySelector(".quick-start"));
+  assert.equal(document.querySelector("#pinned-tags-auto-color").checked, false);
+  document.querySelector("#quick-pinned").click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(storedSettings.pinnedTagsAutoColor, true);
+  assert.equal(document.querySelector("#pinned-tags-auto-color").checked, true);
+
   assert.equal(document.querySelectorAll("#template-rows tr").length, 20);
   assert.match(document.querySelector("#template-summary").textContent, /将新增/);
   assert.equal(document.querySelectorAll("#colored-tags tr").length, 4);
@@ -627,6 +690,7 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   document.querySelector("#undo-template").click();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(storedSettings.contentEnabled, false);
+  assert.equal(storedSettings.pinnedTagsAutoColor, true);
   assert.equal(storedSettings.overrides["模板后新增"], "coral");
   assert.equal(Object.hasOwn(storedSettings.overrides, "个人"), false);
 
@@ -638,6 +702,7 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   const restoredSettings = {
     ...colors.cloneDefaultSettings(),
     contentEnabled: false,
+    pinnedTagsAutoColor: true,
     overrides: {
       "工作": "indigo",
       "工作/项目/A": "sky",
@@ -654,7 +719,7 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
       text: async () => JSON.stringify(
         settingsTools.createBackup(
           restoredSettings,
-          "0.2.1",
+          "0.3.0",
           new Date("2026-07-30T06:00:00.000Z")
         )
       )
@@ -669,6 +734,7 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(storedSettings.overrides["个人"], "jade");
   assert.equal(storedSettings.overrides["医学"], "coral");
+  assert.equal(storedSettings.pinnedTagsAutoColor, true);
 
   const search = document.querySelector("#rule-search");
   search.value = "项目";
@@ -697,7 +763,15 @@ test("设置页能完整加载并执行模板、筛选和批量预览", async ()
   assert.match(document.querySelector("#batch-preview").textContent, /无效规则：1/);
   assert.equal(document.querySelector("#apply-batch").disabled, true);
 
+  tagName.value = "   ";
+  document.querySelector("#rule-form").dispatchEvent(
+    new window.Event("submit", { bubbles: true, cancelable: true })
+  );
+  assert.equal(document.querySelector("#status").classList.contains("is-error"), true);
+  assert.equal(document.querySelector("#status").getAttribute("role"), "alert");
+
   const optionsCss = fs.readFileSync(path.join(__dirname, "../options/options.css"), "utf8");
   assert.doesNotMatch(optionsCss, /\.file-button input\s*\{[^}]*display:\s*none/s);
   assert.match(optionsCss, /\.file-button:focus-within/);
+  assert.match(optionsCss, /\.status\.is-error/);
 });

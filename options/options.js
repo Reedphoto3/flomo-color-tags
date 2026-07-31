@@ -9,7 +9,12 @@
     enabled: document.querySelector("#enabled"),
     contentEnabled: document.querySelector("#content-enabled"),
     sidebarEnabled: document.querySelector("#sidebar-enabled"),
+    pinnedTagsAutoColor: document.querySelector("#pinned-tags-auto-color"),
     colorMode: document.querySelector("#color-mode"),
+    quickTemplate: document.querySelector("#quick-template"),
+    quickPinned: document.querySelector("#quick-pinned"),
+    pinnedColoringPanel: document.querySelector("#pinned-coloring-panel"),
+    templatePanel: document.querySelector("#template-panel"),
     templateLanguage: document.querySelector("#template-language"),
     templateRows: document.querySelector("#template-rows"),
     templateOverwrite: document.querySelector("#template-overwrite"),
@@ -45,7 +50,8 @@
 
   function setStatus(message, isError) {
     elements.status.textContent = message;
-    elements.status.style.color = isError ? "#b42318" : "";
+    elements.status.classList.toggle("is-error", Boolean(isError));
+    elements.status.setAttribute("role", isError ? "alert" : "status");
   }
 
   function clearTemplateUndo() {
@@ -77,7 +83,11 @@
     elements.enabled.checked = settings.enabled;
     elements.contentEnabled.checked = settings.contentEnabled;
     elements.sidebarEnabled.checked = settings.sidebarEnabled;
+    elements.pinnedTagsAutoColor.checked = settings.pinnedTagsAutoColor;
     elements.colorMode.value = settings.colorMode;
+    elements.quickPinned.textContent = settings.pinnedTagsAutoColor
+      ? "已启用固定标签配色"
+      : "启用固定标签配色";
   }
 
   function setCustomColor(value) {
@@ -271,7 +281,7 @@
       cell.className = "empty";
       cell.textContent = rows.length
         ? "没有符合当前筛选条件的规则。"
-        : "暂时没有已着色标签。请在上方输入标签名并保存颜色。";
+        : "暂时没有单独颜色规则。可以使用入门模板；若只想区分侧栏固定标签，也可开启固定标签自动配色。";
       row.append(cell);
       elements.coloredTags.append(row);
       return;
@@ -325,6 +335,23 @@
     renderTemplateSummary();
   }
 
+  elements.quickTemplate.addEventListener("click", () => {
+    elements.templatePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    elements.templateLanguage.focus({ preventScroll: true });
+    setStatus("可选择标签语言、标签名和颜色后再应用模板。");
+  });
+
+  elements.quickPinned.addEventListener("click", async () => {
+    if (!settings.pinnedTagsAutoColor) {
+      settings.pinnedTagsAutoColor = true;
+      await saveSettings("已启用固定标签自动配色；刷新 flomo 页面后即可查看。");
+    } else {
+      setStatus("固定标签自动配色已启用。");
+    }
+    elements.pinnedColoringPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    elements.pinnedTagsAutoColor.focus({ preventScroll: true });
+  });
+
   elements.paletteName.addEventListener("change", () => {
     elements.customColorWrap.hidden = elements.paletteName.value !== "__custom__";
   });
@@ -351,6 +378,14 @@
       await saveSettings("显示范围已保存。");
     });
   }
+
+  elements.pinnedTagsAutoColor.addEventListener("change", async () => {
+    settings.pinnedTagsAutoColor = elements.pinnedTagsAutoColor.checked;
+    await saveSettings(settings.pinnedTagsAutoColor
+      ? "已启用固定标签自动配色；显式颜色规则仍然优先。"
+      : "已关闭固定标签自动配色；未设置规则的固定标签将不再着色。"
+    );
+  });
 
   elements.colorMode.addEventListener("change", async () => {
     settings.colorMode = elements.colorMode.value;

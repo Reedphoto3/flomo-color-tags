@@ -1,6 +1,6 @@
 {
   "name": "flomo-color-tags",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "test": "node --test tests/tag-colors.test.js"
